@@ -452,3 +452,59 @@ details[open] .discipline-header::after {
     font-size: 0.95rem;
     font-weight: 500;
 }
+
+/* Стили для поля пароля с иконкой */
+.password-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.password-wrapper input {
+    width: 100%;
+    padding-right: 40px; /* Отступ справа для иконки */
+}
+
+.password-toggle {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.2s, background-color 0.2s;
+}
+
+.password-toggle:hover {
+    color: #003366;
+    background-color: #e9ecef;
+}
+
+.password-toggle:focus {
+    outline: 2px solid #003366;
+    outline-offset: 2px;
+}
+
+/* Логика переключения иконок */
+.password-toggle .eye-open {
+    display: none; /* По умолчанию скрыт, так как пароль скрыт */
+}
+
+.password-toggle .eye-closed {
+    display: block; /* По умолчанию виден перечеркнутый глаз */
+}
+
+/* Когда добавлен класс is-visible (пароль показан) */
+.password-toggle.is-visible .eye-open {
+    display: block;
+}
+
+.password-toggle.is-visible .eye-closed {
+    display: none;
+}
