@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Учет успеваемости ИФМНиИТ ПсковГУ</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Система учета успеваемости ИФМНиИТ</h1>
+            {% if current_user.is_authenticated %}
+                <nav>
+                    {% if current_user.__class__.__name__ == 'Admin' %}
+                        <a href="{{ url_for('admin_dashboard') }}">Панель методиста</a>
+                        <a href="{{ url_for('add_assessment') }}">Добавить результат</a>
+                    {% elif current_user.__class__.__name__ == 'Student' %}
+                        <a href="{{ url_for('student_dashboard') }}">Моя успеваемость</a>
+                    {% endif %}
+                    <a href="{{ url_for('logout') }}" class="logout-btn">Выйти ({{ current_user.surname }})</a>
+                </nav>
+            {% endif %}
+        </div>
+    </header>
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class="flashes">
+                {% for category, message in messages %}
+                    <li class="{{ category }}">{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

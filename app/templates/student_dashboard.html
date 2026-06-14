@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Индивидуальная академическая справка</h2>
+<p>Студент: {{ current_user.surname }} {{ current_user.name }} {{ current_user.patronymic }}</p>
+<p>Группа: {{ current_user.group.number }}</p>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Дисциплина</th>
+            <th>Форма</th>
+            <th>Попытка</th>
+            <th>Дата</th>
+            <th>Результат</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for event in events %}
+        <tr>
+            <td>{{ event.discipline.name }}</td>
+            <td>{{ event.form }}</td>
+            <td>{{ event.attempt_type }}</td>
+            <td>{{ event.date.strftime('%d.%m.%Y') }}</td>
+            <td class="grade-{{ event.grade }}">{{ event.grade }}</td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="5">Оценки отсутствуют</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

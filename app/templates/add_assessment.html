@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Регистрация результата зачётного мероприятия</h2>
+<form method="POST" action="{{ url_for('add_assessment') }}" class="form-card">
+    <div class="form-group">
+        <label for="student_id">Студент:</label>
+        <select name="student_id" id="student_id" required>
+            {% for student in students %}
+                <option value="{{ student.id }}">{{ student.surname }} {{ student.name }} (Гр. {{ student.group.number }})</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="discipline_id">Дисциплина:</label>
+        <select name="discipline_id" id="discipline_id" required>
+            {% for disc in disciplines %}
+                <option value="{{ disc.id }}">{{ disc.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label for="form_type">Форма контроля:</label>
+            <select name="form_type" id="form_type" required>
+                <option value="экзамен">Экзамен</option>
+                <option value="зачет">Зачет</option>
+                <option value="зачет с оценкой">Зачет с оценкой</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="attempt_type">Тип попытки:</label>
+            <select name="attempt_type" id="attempt_type" required>
+                <option value="основная">Основная</option>
+                <option value="досрочная">Досрочная</option>
+                <option value="первая_пересдача">Первая пересдача</option>
+                <option value="вторая_пересдача">Вторая пересдача</option>
+                <option value="комиссия">Комиссия</option>
+            </select>
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label for="grade">Результат:</label>
+            <select name="grade" id="grade" required>
+                <option value="отлично">Отлично</option>
+                <option value="хорошо">Хорошо</option>
+                <option value="удовлетворительно">Удовлетворительно</option>
+                <option value="неудовлетворительно">Неудовлетворительно</option>
+                <option value="зачтено">Зачтено</option>
+                <option value="не зачтено">Не зачтено</option>
+                <option value="неявка">Неявка</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="date">Дата:</label>
+            <input type="date" name="date" id="date" required value="2024-12-25">
+        </div>
+    </div>
+    <div class="form-group">
+        <label for="teacher_id">Преподаватель:</label>
+        <select name="teacher_id" id="teacher_id" required>
+            {% for teacher in teachers %}
+                <option value="{{ teacher.id }}">{{ teacher.surname }} {{ teacher.name[0] }}.</option>
+            {% endfor %}
+        </select>
+    </div>
+    <button type="submit" class="btn-primary">Сохранить результат</button>
+</form>
+{% endblock %}
