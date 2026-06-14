@@ -4,30 +4,67 @@
 <p>Студент: {{ current_user.surname }} {{ current_user.name }} {{ current_user.patronymic }}</p>
 <p>Группа: {{ current_user.group.number }}</p>
 
-<table class="data-table">
-    <thead>
-        <tr>
-            <th>Дисциплина</th>
-            <th>Форма</th>
-            <th>Попытка</th>
-            <th>Дата</th>
-            <th>Результат</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for event in events %}
-        <tr>
-            <td>{{ event.discipline.name }}</td>
-            <td>{{ event.form }}</td>
-            <td>{{ event.attempt_type }}</td>
-            <td>{{ event.date.strftime('%d.%m.%Y') }}</td>
-            <td class="grade-{{ event.grade }}">{{ event.grade }}</td>
-        </tr>
-        {% else %}
-        <tr>
-            <td colspan="5">Оценки отсутствуют</td>
-        </tr>
+<!-- Навигация по семестрам -->
+<div class="semester-nav">
+    {% if current_semester > 1 %}
+        <a href="{{ url_for('main.student_dashboard', semester=current_semester - 1) }}" class="nav-btn">&larr; Предыдущий семестр</a>
+    {% else %}
+        <span class="nav-btn disabled">&larr; Предыдущий семестр</span>
+    {% endif %}
+
+    <span class="semester-title">Семестр {{ current_semester }}</span>
+
+    <!-- Используем max_semesters вместо жестко заданного 8 -->
+    {% if current_semester < max_semesters %}
+        <a href="{{ url_for('main.student_dashboard', semester=current_semester + 1) }}" class="nav-btn">Следующий семестр &rarr;</a>
+    {% else %}
+        <span class="nav-btn disabled">Следующий семестр &rarr;</span>
+    {% endif %}
+</div>
+
+<!-- Список дисциплин (без изменений, как в предыдущем варианте) -->
+<div class="disciplines-list">
+    {% if grouped_events %}
+        {% for discipline_name, attempts in grouped_events.items() %}
+            {% set latest_attempt = attempts[0] %}
+
+            <details class="discipline-card">
+                <summary class="discipline-header">
+                    <span class="discipline-name">{{ discipline_name }}</span>
+                    <span class="discipline-meta">
+                        Форма: {{ latest_attempt.form }} |
+                        Попытка: {{ latest_attempt.attempt_type }} |
+                        Дата: {{ latest_attempt.date.strftime('%d.%m.%Y') }}
+                    </span>
+                    <span class="grade-badge grade-{{ latest_attempt.grade }}">{{ latest_attempt.grade }}</span>
+                </summary>
+
+                <table class="nested-table">
+                    <thead>
+                        <tr>
+                            <th>№ попытки</th>
+                            <th>Тип попытки</th>
+                            <th>Дата</th>
+                            <th>Преподаватель</th>
+                            <th>Результат</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for attempt in attempts %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ attempt.attempt_type }}</td>
+                            <td>{{ attempt.date.strftime('%d.%m.%Y') }}</td>
+                            <td>{{ attempt.teacher.surname }} {{ attempt.teacher.name[0] }}.</td>
+                            <td class="grade-{{ attempt.grade }}">{{ attempt.grade }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </details>
         {% endfor %}
-    </tbody>
-</table>
+    {% else %}
+        <p class="empty-state">В этом семестре оценки отсутствуют.</p>
+    {% endif %}
+</div>
 {% endblock %}

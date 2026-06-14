@@ -52,9 +52,18 @@
             </select>
         </div>
         <div class="form-group">
-            <label for="date">Дата:</label>
-            <input type="date" name="date" id="date" required value="2024-12-25">
+            <label for="semester">Номер семестра:</label>
+            <select name="semester" id="semester" required>
+                <!-- Динамическая генерация опций на основе максимального семестра в системе -->
+                {% for i in range(1, max_semesters_display + 1) %}
+                    <option value="{{ i }}" {% if i == 3 %}selected{% endif %}>{{ i }} семестр</option>
+                {% endfor %}
+            </select>
         </div>
+    </div>
+    <div class="form-group">
+        <label for="date">Дата:</label>
+        <input type="date" name="date" id="date" required value="2024-12-25">
     </div>
     <div class="form-group">
         <label for="teacher_id">Преподаватель:</label>

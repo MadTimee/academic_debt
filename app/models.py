@@ -129,11 +129,12 @@ class AssessmentEvent(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     discipline_id = db.Column(db.Integer, db.ForeignKey('discipline.id'), nullable=False)
     student_id = db.Column(db.Integer, db.ForeignKey('student.id'), nullable=False)
-    form = db.Column(db.String(50), nullable=False) # зачет, экзамен
-    attempt_type = db.Column(db.String(50), nullable=False) # основная, досрочная, первая_пересдача, вторая_пересдача, комиссия
+    form = db.Column(db.String(50), nullable=False)
+    attempt_type = db.Column(db.String(50), nullable=False)
     date = db.Column(db.Date, nullable=False)
-    grade = db.Column(db.String(50)) # зачтено, не зачтено, неудовлетворительно, и т.д.
+    grade = db.Column(db.String(50))
     teacher_id = db.Column(db.Integer, db.ForeignKey('teacher.id'), nullable=False)
+    semester = db.Column(db.Integer, nullable=False)
 
 # 12. Действие (Журнал аудита)
 class ActionLog(db.Model):

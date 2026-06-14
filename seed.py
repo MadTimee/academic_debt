@@ -139,10 +139,10 @@ def seed_database():
             attempt_type="основная",
             date=date(2024, 12, 20),
             grade="хорошо",
-            teacher_id=teacher1.id
+            teacher_id=teacher1.id,
+            semester=3
         )
 
-        # Студент 2: не сдал Высшую математику, первая пересдача (неуд) -> это задолженность!
         event2 = AssessmentEvent(
             discipline_id=disc_math.id,
             student_id=student2.id,
@@ -150,10 +150,10 @@ def seed_database():
             attempt_type="первая_пересдача",
             date=date(2025, 2, 10),
             grade="неудовлетворительно",
-            teacher_id=teacher1.id
+            teacher_id=teacher1.id,
+            semester=3
         )
 
-        # Студент 2: успешно сдал Программирование на Python
         event3 = AssessmentEvent(
             discipline_id=disc_python.id,
             student_id=student2.id,
@@ -161,7 +161,8 @@ def seed_database():
             attempt_type="основная",
             date=date(2024, 12, 22),
             grade="отлично",
-            teacher_id=teacher1.id
+            teacher_id=teacher1.id,
+            semester=3
         )
 
         db.session.add_all([event1, event2, event3])
