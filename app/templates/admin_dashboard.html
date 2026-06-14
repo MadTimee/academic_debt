@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Реестр зачётных мероприятий</h2>
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Студент</th>
+            <th>Группа</th>
+            <th>Дисциплина</th>
+            <th>Форма</th>
+            <th>Попытка</th>
+            <th>Дата</th>
+            <th>Оценка</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for event in events %}
+        <tr>
+            <td>{{ event.student.surname }} {{ event.student.name[0] }}.</td>
+            <td>{{ event.student.group.number }}</td>
+            <td>{{ event.discipline.name }}</td>
+            <td>{{ event.form }}</td>
+            <td>{{ event.attempt_type }}</td>
+            <td>{{ event.date.strftime('%d.%m.%Y') }}</td>
+            <td class="grade-{{ event.grade }}">{{ event.grade }}</td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="7">Записи отсутствуют</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

@@ -13,12 +13,12 @@
             {% if current_user.is_authenticated %}
                 <nav>
                     {% if current_user.__class__.__name__ == 'Admin' %}
-                        <a href="{{ url_for('admin_dashboard') }}">Панель методиста</a>
-                        <a href="{{ url_for('add_assessment') }}">Добавить результат</a>
+                        <a href="{{ url_for('main.admin_dashboard') }}">Панель методиста</a>
+                        <a href="{{ url_for('main.add_assessment') }}">Добавить результат</a>
                     {% elif current_user.__class__.__name__ == 'Student' %}
-                        <a href="{{ url_for('student_dashboard') }}">Моя успеваемость</a>
+                        <a href="{{ url_for('main.student_dashboard') }}">Моя успеваемость</a>
                     {% endif %}
-                    <a href="{{ url_for('logout') }}" class="logout-btn">Выйти ({{ current_user.surname }})</a>
+                    <a href="{{ url_for('main.logout') }}" class="logout-btn">Выйти ({{ current_user.surname }})</a>
                 </nav>
             {% endif %}
         </div>

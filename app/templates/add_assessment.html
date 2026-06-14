@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Регистрация результата зачётного мероприятия</h2>
-<form method="POST" action="{{ url_for('add_assessment') }}" class="form-card">
+<form method="POST" action="{{ url_for('main.add_assessment') }}" class="form-card">
     <div class="form-group">
         <label for="student_id">Студент:</label>
         <select name="student_id" id="student_id" required>

@@ -1,5 +1,6 @@
 from app import db
 from datetime import datetime
+from flask_login import UserMixin
 
 # 1. Контакт
 class Contact(db.Model):
@@ -73,22 +74,25 @@ class PlanDisciplineLink(db.Model):
     assessment_form = db.Column(db.String(50)) # зачет, экзамен
 
 # 8. Студент
-class Student(db.Model):
+class Student(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     surname = db.Column(db.String(100), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     patronymic = db.Column(db.String(100))
     student_id_number = db.Column(db.String(50), unique=True, nullable=False)
     group_id = db.Column(db.Integer, db.ForeignKey('study_group.id'), nullable=False)
-    status = db.Column(db.String(50), default='учится') # учится, отчислен, академ
+    status = db.Column(db.String(50), default='учится')
     contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), unique=True)
     reg_date = db.Column(db.Date, default=datetime.utcnow)
     login = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     assessments = db.relationship('AssessmentEvent', backref='student', lazy=True)
 
+    def get_id(self):
+        return f"student_{self.id}"
+
 # 9. Преподаватель
-class Teacher(db.Model):
+class Teacher(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     surname = db.Column(db.String(100), nullable=False)
     name = db.Column(db.String(100), nullable=False)
@@ -100,8 +104,11 @@ class Teacher(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     assessments = db.relationship('AssessmentEvent', backref='teacher', lazy=True)
 
+    def get_id(self):
+        return f"teacher_{self.id}"
+
 # 10. Администратор
-class Admin(db.Model):
+class Admin(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     surname = db.Column(db.String(100), nullable=False)
     name = db.Column(db.String(100), nullable=False)
@@ -113,6 +120,9 @@ class Admin(db.Model):
     login = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     actions = db.relationship('ActionLog', backref='admin', lazy=True)
+
+    def get_id(self):
+        return f"admin_{self.id}"
 
 # 11. Зачётное мероприятие
 class AssessmentEvent(db.Model):
