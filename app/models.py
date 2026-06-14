@@ -2,8 +2,10 @@ from app import db
 from datetime import datetime
 from flask_login import UserMixin
 
+
 # 1. Контакт
 class Contact(db.Model):
+    __tablename__ = 'contact'
     id = db.Column(db.Integer, primary_key=True)
     passport_series = db.Column(db.String(4))
     passport_number = db.Column(db.String(6))
@@ -22,59 +24,88 @@ class Contact(db.Model):
     phone = db.Column(db.String(15))
     email = db.Column(db.String(100))
 
+
 # 2. Должность
 class Position(db.Model):
+    __tablename__ = 'position'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100), nullable=False)
-    rank = db.Column(db.Integer, nullable=False) # 1-5 для иерархии прав
+    rank = db.Column(db.Integer, nullable=False)
     permissions_desc = db.Column(db.Text, nullable=True)
-    admins = db.relationship('Admin', backref='position', lazy=True)
+
+    # Явная двусторонняя связь
+    admins = db.relationship('Admin', back_populates='position', lazy=True)
+
 
 # 3. Направление подготовки
 class StudyDirection(db.Model):
+    __tablename__ = 'study_direction'
     id = db.Column(db.Integer, primary_key=True)
-    level = db.Column(db.String(50)) # бакалавриат, магистратура
-    code = db.Column(db.String(20), nullable=False) # например, 02.03.01
+    level = db.Column(db.String(50))
+    code = db.Column(db.String(20), nullable=False)
     name = db.Column(db.String(255), nullable=False)
     profile = db.Column(db.String(255))
-    plans = db.relationship('StudyPlan', backref='direction', lazy=True)
+
+    plans = db.relationship('StudyPlan', back_populates='direction', lazy=True)
+
 
 # 4. Учебный план
 class StudyPlan(db.Model):
+    __tablename__ = 'study_plan'
     id = db.Column(db.Integer, primary_key=True)
     direction_id = db.Column(db.Integer, db.ForeignKey('study_direction.id'), nullable=False)
     approval_year = db.Column(db.Integer, nullable=False)
     duration_semesters = db.Column(db.Integer, nullable=False)
-    groups = db.relationship('StudyGroup', backref='plan', lazy=True)
-    disciplines_link = db.relationship('PlanDisciplineLink', backref='plan', lazy=True, cascade='all, delete-orphan')
+
+    direction = db.relationship('StudyDirection', back_populates='plans')
+    groups = db.relationship('StudyGroup', back_populates='plan', lazy=True)
+    disciplines_link = db.relationship('PlanDisciplineLink', back_populates='plan', lazy=True,
+                                       cascade='all, delete-orphan')
+
 
 # 5. Учебная группа
 class StudyGroup(db.Model):
+    __tablename__ = 'study_group'
     id = db.Column(db.Integer, primary_key=True)
-    number = db.Column(db.String(20), nullable=False) # например, 0292-04
+    number = db.Column(db.String(20), nullable=False)
     plan_id = db.Column(db.Integer, db.ForeignKey('study_plan.id'), nullable=False)
-    form_of_study = db.Column(db.String(50)) # очная, заочная
+    form_of_study = db.Column(db.String(50))
     current_year = db.Column(db.Integer)
-    students = db.relationship('Student', backref='group', lazy=True)
+    current_semester = db.Column(db.Integer, nullable=False, default=1)
+
+    plan = db.relationship('StudyPlan', back_populates='groups')
+    students = db.relationship('Student', back_populates='group', lazy=True)
+    teacher_assignments = db.relationship('TeacherAssignment', back_populates='study_group', lazy=True)
+
 
 # 6. Дисциплина
 class Discipline(db.Model):
+    __tablename__ = 'discipline'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
-    plans_link = db.relationship('PlanDisciplineLink', backref='discipline', lazy=True)
-    assessments = db.relationship('AssessmentEvent', backref='discipline', lazy=True)
 
-# 7. Связь План-Дисциплина (Many-to-Many)
+    plans_link = db.relationship('PlanDisciplineLink', back_populates='discipline', lazy=True)
+    teacher_assignments = db.relationship('TeacherAssignment', back_populates='discipline', lazy=True)
+    assessments = db.relationship('AssessmentEvent', back_populates='discipline', lazy=True)
+
+
+# 7. Связь План-Дисциплина
 class PlanDisciplineLink(db.Model):
+    __tablename__ = 'plan_discipline_link'
     id = db.Column(db.Integer, primary_key=True)
     plan_id = db.Column(db.Integer, db.ForeignKey('study_plan.id'), nullable=False)
     discipline_id = db.Column(db.Integer, db.ForeignKey('discipline.id'), nullable=False)
     semester = db.Column(db.Integer, nullable=False)
     hours = db.Column(db.Integer, nullable=False)
-    assessment_form = db.Column(db.String(50)) # зачет, экзамен
+    assessment_form = db.Column(db.String(50))
+
+    plan = db.relationship('StudyPlan', back_populates='disciplines_link')
+    discipline = db.relationship('Discipline', back_populates='plans_link')
+
 
 # 8. Студент
 class Student(db.Model, UserMixin):
+    __tablename__ = 'student'
     id = db.Column(db.Integer, primary_key=True)
     surname = db.Column(db.String(100), nullable=False)
     name = db.Column(db.String(100), nullable=False)
@@ -86,13 +117,17 @@ class Student(db.Model, UserMixin):
     reg_date = db.Column(db.Date, default=datetime.utcnow)
     login = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    assessments = db.relationship('AssessmentEvent', backref='student', lazy=True)
+
+    group = db.relationship('StudyGroup', back_populates='students')
+    assessments = db.relationship('AssessmentEvent', back_populates='student', lazy=True)
 
     def get_id(self):
         return f"student_{self.id}"
 
+
 # 9. Преподаватель
 class Teacher(db.Model, UserMixin):
+    __tablename__ = 'teacher'
     id = db.Column(db.Integer, primary_key=True)
     surname = db.Column(db.String(100), nullable=False)
     name = db.Column(db.String(100), nullable=False)
@@ -102,13 +137,17 @@ class Teacher(db.Model, UserMixin):
     reg_date = db.Column(db.Date, default=datetime.utcnow)
     login = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    assessments = db.relationship('AssessmentEvent', backref='teacher', lazy=True)
+
+    assignments = db.relationship('TeacherAssignment', back_populates='teacher', lazy=True)
+    assessments = db.relationship('AssessmentEvent', back_populates='teacher', lazy=True)
 
     def get_id(self):
         return f"teacher_{self.id}"
 
+
 # 10. Администратор
 class Admin(db.Model, UserMixin):
+    __tablename__ = 'admin'
     id = db.Column(db.Integer, primary_key=True)
     surname = db.Column(db.String(100), nullable=False)
     name = db.Column(db.String(100), nullable=False)
@@ -119,13 +158,17 @@ class Admin(db.Model, UserMixin):
     reg_date = db.Column(db.Date, default=datetime.utcnow)
     login = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    actions = db.relationship('ActionLog', backref='admin', lazy=True)
+
+    position = db.relationship('Position', back_populates='admins')
+    actions = db.relationship('ActionLog', back_populates='admin', lazy=True)
 
     def get_id(self):
         return f"admin_{self.id}"
 
+
 # 11. Зачётное мероприятие
 class AssessmentEvent(db.Model):
+    __tablename__ = 'assessment_event'
     id = db.Column(db.Integer, primary_key=True)
     discipline_id = db.Column(db.Integer, db.ForeignKey('discipline.id'), nullable=False)
     student_id = db.Column(db.Integer, db.ForeignKey('student.id'), nullable=False)
@@ -133,16 +176,39 @@ class AssessmentEvent(db.Model):
     attempt_type = db.Column(db.String(50), nullable=False)
     date = db.Column(db.Date, nullable=False)
     grade = db.Column(db.String(50))
-    teacher_id = db.Column(db.Integer, db.ForeignKey('teacher.id'), nullable=False)
     semester = db.Column(db.Integer, nullable=False)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('teacher.id'), nullable=False)
+
+    discipline = db.relationship('Discipline', back_populates='assessments')
+    student = db.relationship('Student', back_populates='assessments')
+    teacher = db.relationship('Teacher', back_populates='assessments')
+
 
 # 12. Действие (Журнал аудита)
 class ActionLog(db.Model):
+    __tablename__ = 'action_log'
     id = db.Column(db.Integer, primary_key=True)
     admin_id = db.Column(db.Integer, db.ForeignKey('admin.id'), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    operation_type = db.Column(db.String(10), nullable=False) # INSERT, UPDATE, DELETE
+    operation_type = db.Column(db.String(10), nullable=False)
     table_name = db.Column(db.String(100), nullable=False)
     record_id = db.Column(db.Integer, nullable=False)
-    old_data = db.Column(db.Text, nullable=True) # JSON строка
-    new_data = db.Column(db.Text, nullable=True) # JSON строка
+    old_data = db.Column(db.Text, nullable=True)
+    new_data = db.Column(db.Text, nullable=True)
+
+    admin = db.relationship('Admin', back_populates='actions')
+
+
+# 13. Распределение нагрузки преподавателя (Новая сущность)
+class TeacherAssignment(db.Model):
+    __tablename__ = 'teacher_assignment'
+    id = db.Column(db.Integer, primary_key=True)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('teacher.id'), nullable=False)
+    discipline_id = db.Column(db.Integer, db.ForeignKey('discipline.id'), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey('study_group.id'), nullable=False)
+    semester = db.Column(db.Integer, nullable=False)
+
+    # Явные двусторонние связи через back_populates
+    teacher = db.relationship('Teacher', back_populates='assignments')
+    discipline = db.relationship('Discipline', back_populates='teacher_assignments')
+    study_group = db.relationship('StudyGroup', back_populates='teacher_assignments')

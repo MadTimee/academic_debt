@@ -1,5 +1,229 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Панель преподавателя</h2>
-<p>Функционал ввода оценок для закрепленных дисциплин находится в разработке.</p>
+<h2>Рабочая область преподавателя</h2>
+<p>Преподаватель: {{ current_user.surname }} {{ current_user.name }} {{ current_user.patronymic }}</p>
+
+<!-- Навигация по семестрам -->
+<div class="semester-nav">
+    {% if available_semesters and current_semester != available_semesters[-1] %}
+        {% set prev_idx = available_semesters.index(current_semester) + 1 %}
+        <a href="{{ url_for('main.teacher_dashboard', semester=available_semesters[prev_idx], status=filter_statuses) }}" class="nav-btn">&larr; Предыдущий семестр</a>
+    {% else %}
+        <span class="nav-btn disabled">&larr; Предыдущий семестр</span>
+    {% endif %}
+
+    <span class="semester-title">Семестр {{ current_semester }}</span>
+
+    {% if available_semesters and current_semester != available_semesters[0] %}
+        {% set next_idx = available_semesters.index(current_semester) - 1 %}
+        <a href="{{ url_for('main.teacher_dashboard', semester=available_semesters[next_idx], status=filter_statuses) }}" class="nav-btn">Следующий семестр &rarr;</a>
+    {% else %}
+        <span class="nav-btn disabled">Следующий семестр &rarr;</span>
+    {% endif %}
+</div>
+
+<!-- Фильтры по статусу семестра -->
+<form method="GET" action="{{ url_for('main.teacher_dashboard') }}" class="filter-form">
+    <input type="hidden" name="semester" value="{{ current_semester }}">
+    <span style="font-weight: bold; margin-right: 10px;">Отображать группы:</span>
+    <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 5px; margin-right: 15px;">
+        <input type="checkbox" name="status" value="current" {% if 'current' in filter_statuses %}checked{% endif %} onchange="this.form.submit()">
+        Текущий
+    </label>
+    <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 5px; margin-right: 15px;">
+        <input type="checkbox" name="status" value="past" {% if 'past' in filter_statuses %}checked{% endif %} onchange="this.form.submit()">
+        Прошедший
+    </label>
+    <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 5px;">
+        <input type="checkbox" name="status" value="future" {% if 'future' in filter_statuses %}checked{% endif %} onchange="this.form.submit()">
+        Будущий
+    </label>
+</form>
+
+<!-- Иерархический список нагрузки -->
+<div class="disciplines-list">
+    {% if grouped_data %}
+        {% for disc_name, groups in grouped_data.items() %}
+            <details class="discipline-card" open>
+                <summary class="discipline-header">
+                    <span class="discipline-name">{{ disc_name }}</span>
+                    <span class="discipline-meta">{{ groups | length }} гр.</span>
+                </summary>
+
+                {% for group_data in groups %}
+                    <details class="group-card">
+                        <summary class="group-header">
+                            Группа {{ group_data.group_num }}
+                            <span style="color: {{ group_data.status_color }}; font-size: 0.85em; margin-left: 10px; font-weight: normal;">
+                                ({{ group_data.status_text }})
+                            </span>
+                            <span style="margin-left: auto; font-size: 0.9em; color: #495057;">
+                                {{ group_data.students | length }} чел.
+                            </span>
+                        </summary>
+
+                        <table class="nested-table">
+                            <thead>
+                                <tr>
+                                    <th>Студент</th>
+                                    <th>Текущий статус</th>
+                                    <th>Действие</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in group_data.students %}
+                                <tr>
+                                    <td>{{ item.student.surname }} {{ item.student.name[0] }}. {{ item.student.patronymic[0] if item.student.patronymic else '' }}.</td>
+                                    <td>
+                                        {% if item.latest_event %}
+                                            <span class="grade-badge grade-{{ item.latest_event.grade }}">
+                                                {{ item.latest_event.grade }} ({{ item.latest_event.attempt_type }}, {{ item.latest_event.date.strftime('%d.%m.%Y') }})
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted">Не выставлена</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if item.can_add_grade %}
+                                            <button class="btn-small btn-primary"
+                                                onclick="openGradeModal('{{ item.student.id }}', '{{ item.student.surname }} {{ item.student.name[0] }}.{{ item.student.patronymic[0] if item.student.patronymic else '' }}.', {{ group_data.discipline_id }}, {{ group_data.group_id }}, {{ current_semester }}, {{ teacher_id }})">
+                                                Выставить
+                                            </button>
+                                        {% else %}
+                                            <span class="text-muted" style="font-size: 0.85rem;">Оценка принята</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+
+                                {% if item.all_events | length > 1 %}
+                                <tr>
+                                    <td colspan="3" style="padding: 0; border: none;">
+                                        <details style="margin: 5px 20px 15px 20px; background: #f8f9fa; border-radius: 4px;">
+                                            <summary style="padding: 8px 15px; cursor: pointer; font-size: 0.9rem; color: #495057;">История попыток ({{ item.all_events | length }})</summary>
+                                            <table class="nested-table" style="margin: 0; font-size: 0.85rem;">
+                                                <thead>
+                                                    <tr>
+                                                        <th>№</th>
+                                                        <th>Тип попытки</th>
+                                                        <th>Дата</th>
+                                                        <th>Результат</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for attempt in item.all_events %}
+                                                    <tr>
+                                                        <td>{{ loop.index }}</td>
+                                                        <td>{{ attempt.attempt_type }}</td>
+                                                        <td>{{ attempt.date.strftime('%d.%m.%Y') }}</td>
+                                                        <td class="grade-{{ attempt.grade }}">{{ attempt.grade }}</td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </details>
+                                    </td>
+                                </tr>
+                                {% endif %}
+
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </details>
+                {% endfor %}
+            </details>
+        {% endfor %}
+    {% else %}
+        <p class="empty-state">В этом семестре с выбранными фильтрами групп не найдено.</p>
+    {% endif %}
+</div>
+
+<!-- Пагинация -->
+{% if total_pages > 1 %}
+<div class="pagination-container">
+    {% if page > 1 %}
+        <a href="{{ url_for('main.teacher_dashboard', semester=current_semester, status=filter_statuses, page=page-1) }}" class="nav-btn">&larr; Назад</a>
+    {% else %}
+        <span class="nav-btn disabled">&larr; Назад</span>
+    {% endif %}
+
+    <span class="page-info">Страница {{ page }} из {{ total_pages }} (Всего групп: {{ total_items }})</span>
+
+    {% if page < total_pages %}
+        <a href="{{ url_for('main.teacher_dashboard', semester=current_semester, status=filter_statuses, page=page+1) }}" class="nav-btn">Вперед &rarr;</a>
+    {% else %}
+        <span class="nav-btn disabled">Вперед &rarr;</span>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Модальное окно (без изменений, как в предыдущем варианте) -->
+<div id="gradeModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closeGradeModal()">&times;</span>
+        <h3>Выставление оценки</h3>
+        <p id="modal_student_name" style="font-weight: bold; color: #003366; margin-bottom: 20px;"></p>
+
+        <form method="POST" action="{{ url_for('main.teacher_add_grade') }}" id="gradeForm">
+            <input type="hidden" name="student_id" id="modal_student_id">
+            <input type="hidden" name="discipline_id" id="modal_discipline_id">
+            <input type="hidden" name="group_id" id="modal_group_id">
+            <input type="hidden" name="semester" id="modal_semester">
+            <input type="hidden" name="teacher_id" id="modal_teacher_id">
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="attempt_type">Тип попытки:</label>
+                    <select name="attempt_type" id="attempt_type" required>
+                        <option value="основная">Основная</option>
+                        <option value="первая_пересдача">Первая пересдача</option>
+                        <option value="вторая_пересдача">Вторая пересдача</option>
+                        <option value="комиссия">Комиссия</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="grade">Результат:</label>
+                    <select name="grade" id="grade" required>
+                        <option value="отлично">Отлично</option>
+                        <option value="хорошо">Хорошо</option>
+                        <option value="удовлетворительно">Удовлетворительно</option>
+                        <option value="неудовлетворительно">Неудовлетворительно</option>
+                        <option value="зачтено">Зачтено</option>
+                        <option value="не зачтено">Не зачтено</option>
+                        <option value="неявка">Неявка</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="date">Дата:</label>
+                <input type="date" name="date" id="date" required value="{{ today_date }}">
+            </div>
+
+            <button type="submit" class="btn-primary">Сохранить</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openGradeModal(studentId, studentName, discId, groupId, semester, teacherId) {
+        document.getElementById('gradeModal').style.display = 'block';
+        document.getElementById('modal_student_name').textContent = 'Студент: ' + studentName;
+        document.getElementById('modal_student_id').value = studentId;
+        document.getElementById('modal_discipline_id').value = discId;
+        document.getElementById('modal_group_id').value = groupId;
+        document.getElementById('modal_semester').value = semester;
+        document.getElementById('modal_teacher_id').value = teacherId;
+    }
+
+    function closeGradeModal() {
+        document.getElementById('gradeModal').style.display = 'none';
+    }
+
+    window.onclick = function(event) {
+        const modal = document.getElementById('gradeModal');
+        if (event.target == modal) {
+            closeGradeModal();
+        }
+    }
+</script>
 {% endblock %}
