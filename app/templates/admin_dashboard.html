@@ -1,34 +1,103 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Реестр зачётных мероприятий</h2>
-<table class="data-table">
-    <thead>
-        <tr>
-            <th>Студент</th>
-            <th>Группа</th>
-            <th>Дисциплина</th>
-            <th>Форма</th>
-            <th>Попытка</th>
-            <th>Дата</th>
-            <th>Оценка</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for event in events %}
-        <tr>
-            <td>{{ event.student.surname }} {{ event.student.name[0] }}.</td>
-            <td>{{ event.student.group.number }}</td>
-            <td>{{ event.discipline.name }}</td>
-            <td>{{ event.form }}</td>
-            <td>{{ event.attempt_type }}</td>
-            <td>{{ event.date.strftime('%d.%m.%Y') }}</td>
-            <td class="grade-{{ event.grade }}">{{ event.grade }}</td>
-        </tr>
-        {% else %}
-        <tr>
-            <td colspan="7">Записи отсутствуют</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="admin-dashboard-container">
+    <div class="dashboard-header">
+        <h2>Панель управления администратора</h2>
+        <p>Добро пожаловать, {{ current_user.surname }} {{ current_user.name[0] }}. {{ current_user.patronymic[0] if current_user.patronymic else '' }}.</p>
+        <p class="dashboard-subtitle">Выберите раздел для просмотра и управления данными системы.</p>
+    </div>
+
+    <div class="dashboard-grid">
+        <a href="{{ url_for('main.admin_view_table', table_name='student') }}" class="dashboard-card">
+            <div class="card-content">
+                <h3>Студенты</h3>
+                <p>Управление контингентом, статусами обучения и контактными данными.</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.admin_view_table', table_name='teacher') }}" class="dashboard-card">
+            <div class="card-content">
+                <h3>Преподаватели</h3>
+                <p>Учет научно-педагогических работников и их контактной информации.</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.admin_view_table', table_name='admin_user') }}" class="dashboard-card">
+            <div class="card-content">
+                <h3>Администраторы</h3>
+                <p>Управление учетными записями сотрудников деканата и ИТ-отдела.</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.admin_view_table', table_name='study_group') }}" class="dashboard-card">
+            <div class="card-content">
+                <h3>Учебные группы</h3>
+                <p>Список групп, привязка к учебным планам и текущим семестрам.</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.admin_view_table', table_name='discipline') }}" class="dashboard-card">
+            <div class="card-content">
+                <h3>Дисциплины</h3>
+                <p>Справочник учебных дисциплин и предметов.</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.admin_view_table', table_name='study_plan') }}" class="dashboard-card">
+            <div class="card-content">
+                <h3>Учебные планы</h3>
+                <p>Документы, регламентирующие освоение программы по годам.</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.admin_view_table', table_name='study_direction') }}" class="dashboard-card">
+            <div class="card-content">
+                <h3>Направления подготовки</h3>
+                <p>Классификатор образовательных программ и профилей.</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.admin_view_table', table_name='position') }}" class="dashboard-card">
+            <div class="card-content">
+                <h3>Должности</h3>
+                <p>Справочник административных ролей и рангов доступа.</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.admin_view_table', table_name='contact') }}" class="dashboard-card">
+            <div class="card-content">
+                <h3>Контакты</h3>
+                <p>Единый справочник паспортных данных и адресов пользователей.</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.admin_view_table', table_name='assessment_event') }}" class="dashboard-card">
+            <div class="card-content">
+                <h3>Зачётные мероприятия</h3>
+                <p>Просмотр всех оценок, попыток пересдач и комиссионных сдач.</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.admin_view_table', table_name='teacher_assignment') }}" class="dashboard-card">
+            <div class="card-content">
+                <h3>Нагрузка преподавателей</h3>
+                <p>Распределение дисциплин по группам и семестрам.</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.admin_view_table', table_name='plan_discipline_link') }}" class="dashboard-card">
+            <div class="card-content">
+                <h3>Связь план-дисциплина</h3>
+                <p>Привязка дисциплин к учебным планам с указанием семестра.</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.admin_view_table', table_name='action_log') }}" class="dashboard-card highlight-card">
+            <div class="card-content">
+                <h3>Журнал действий</h3>
+                <p>Аудит изменений, внесенных администраторами системы (только просмотр).</p>
+            </div>
+        </a>
+    </div>
+</div>
 {% endblock %}

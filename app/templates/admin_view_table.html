@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-layout">
+    <!-- Боковая панель навигации -->
+    <aside class="admin-sidebar">
+        <h3>Управление данными</h3>
+        <ul class="nav-links">
+            {% for key, name in table_names_ru.items() %}
+                <li>
+                    <a href="{{ url_for('main.admin_view_table', table_name=key, search=search_query) }}" 
+                       class="{% if table_name == key %}active{% endif %}">
+                        {{ name }}
+                    </a>
+                </li>
+            {% endfor %}
+        </ul>
+    </aside>
+
+    <!-- Основная область контента -->
+    <main class="admin-content">
+        <div class="content-header">
+            <h2>{{ table_name_ru }}</h2>
+            
+            <!-- Форма поиска -->
+            <form method="GET" action="{{ url_for('main.admin_view_table', table_name=table_name) }}" class="search-form">
+                <select name="search_by" class="search-select">
+                    {% for col_val, col_name in searchable_cols_for_dropdown %}
+                        <option value="{{ col_val }}" {% if search_by == col_val %}selected{% endif %}>
+                            {{ col_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+                <input type="text" name="search" placeholder="Введите значение..." value="{{ search_query }}">
+                <button type="submit" class="btn-primary" style="width: auto; margin-top: 0;">Найти</button>
+                {% if search_query %}
+                    <a href="{{ url_for('main.admin_view_table', table_name=table_name) }}" class="btn-secondary" style="width: auto; margin-top: 0; text-decoration: none; padding: 12px;">Сбросить</a>
+                {% endif %}
+            </form>
+        </div>
+
+        <!-- Таблица данных -->
+        <div class="table-container">
+            {% if items %}
+                <table class="data-table admin-table">
+                    <thead>
+                        <tr>
+                            {% for col in columns %}
+                                <th>{{ column_names_ru.get(col, col | replace('_', ' ') | capitalize) }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                            <tr>
+                                {% for col in columns %}
+                                    <td>
+                                        {% set value = item | attr(col) %}
+                                        {% if value is none %}
+                                            <span class="text-muted">-</span>
+                                        {% elif col == 'date' or col == 'reg_date' or col == 'passport_issue_date' %}
+                                            {{ value.strftime('%d.%m.%Y') }}
+                                        {% else %}
+                                            {{ value }}
+                                        {% endif %}
+                                    </td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <!-- Пагинация -->
+                {% if pagination.pages > 1 %}
+                <div class="pagination-container">
+                    {% if pagination.has_prev %}
+                        <a href="{{ url_for('main.admin_view_table', table_name=table_name, page=pagination.prev_num, search=search_query, search_by=search_by) }}" class="nav-btn">&larr; Назад</a>
+                    {% else %}
+                        <span class="nav-btn disabled">&larr; Назад</span>
+                    {% endif %}
+
+                    <span class="page-info">Страница {{ pagination.page }} из {{ pagination.pages }}</span>
+
+                    {% if pagination.has_next %}
+                        <a href="{{ url_for('main.admin_view_table', table_name=table_name, page=pagination.next_num, search=search_query, search_by=search_by) }}" class="nav-btn">Вперед &rarr;</a>
+                    {% else %}
+                        <span class="nav-btn disabled">Вперед &rarr;</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+            {% else %}
+                <p class="empty-state">Записи не найдены{% if search_query %} по запросу "{{ search_query }}"{% endif %}.</p>
+            {% endif %}
+        </div>
+    </main>
+</div>
+{% endblock %}

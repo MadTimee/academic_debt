@@ -1,8 +1,13 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, abort
 from flask_login import login_user, logout_user, login_required, current_user
 from datetime import datetime
+from sqlalchemy import or_
 from app import db, login_manager
-from app.models import Admin, Student, Teacher, AssessmentEvent, Discipline, TeacherAssignment, StudyGroup
+from app.models import (
+    Admin, Student, Teacher, AssessmentEvent, Discipline, StudyGroup,
+    StudyPlan, StudyDirection, Position, Contact, ActionLog,
+    TeacherAssignment, PlanDisciplineLink
+)
 from werkzeug.security import check_password_hash
 from collections import defaultdict
 import json
@@ -62,16 +67,188 @@ def logout():
     return redirect(url_for('main.login'))
 
 
+# Словарь для маппинга имен таблиц в классы моделей
+MODELS_MAP = {
+    'student': Student,
+    'teacher': Teacher,
+    'admin_user': Admin, # Используем admin_user, чтобы не конфликтовать с именем Blueprint или переменной
+    'study_group': StudyGroup,
+    'discipline': Discipline,
+    'study_plan': StudyPlan,
+    'study_direction': StudyDirection,
+    'position': Position,
+    'contact': Contact,
+    'assessment_event': AssessmentEvent,
+    'action_log': ActionLog,
+    'teacher_assignment': TeacherAssignment,
+    'plan_discipline_link': PlanDisciplineLink
+}
+
+# Словарь колонок, по которым разрешен поиск для каждой таблицы
+SEARCHABLE_COLUMNS = {
+    'student': ['id', 'surname', 'name', 'patronymic', 'student_id_number', 'status'],
+    'teacher': ['id', 'surname', 'name', 'patronymic', 'work_email'],
+    'admin_user': ['id', 'surname', 'name', 'patronymic', 'work_email'],
+    'study_group': ['id', 'number', 'form_of_study', 'current_year', 'current_semester'],
+    'discipline': ['id', 'name'],
+    'study_plan': ['id', 'approval_year', 'duration_semesters'],
+    'study_direction': ['id', 'level', 'code', 'name', 'profile'],
+    'position': ['id', 'title', 'rank'],
+    'contact': ['id', 'phone', 'email', 'snils'],
+    'assessment_event': ['id', 'form', 'attempt_type', 'grade', 'semester'],
+    'action_log': ['id', 'operation_type', 'table_name', 'record_id'],
+    'teacher_assignment': ['id', 'semester'],
+    'plan_discipline_link': ['id', 'semester', 'hours', 'assessment_form']
+}
+
+# Словарь для перевода названий колонок на русский язык
+COLUMN_NAMES_RU = {
+    'id': 'ID',
+    'surname': 'Фамилия',
+    'name': 'Имя',
+    'patronymic': 'Отчество',
+    'student_id_number': 'Номер зачётки',
+    'status': 'Статус',
+    'group_id': 'ID группы',
+    'contact_id': 'ID контакта',
+    'reg_date': 'Дата регистрации',
+    'login': 'Логин',
+    'work_email': 'Рабочая почта',
+    'position_id': 'ID должности',
+    'title': 'Название должности',
+    'rank': 'Ранг',
+    'permissions_desc': 'Описание прав',
+    'level': 'Уровень подготовки',
+    'code': 'Код направления',
+    'profile': 'Профиль',
+    'direction_id': 'ID направления',
+    'approval_year': 'Год утверждения',
+    'duration_semesters': 'Длительность (сем.)',
+    'number': 'Номер группы',
+    'form_of_study': 'Форма обучения',
+    'current_year': 'Текущий курс',
+    'current_semester': 'Текущий семестр',
+    'plan_id': 'ID учебного плана',
+    'semester': 'Семестр',
+    'hours': 'Количество часов',
+    'assessment_form': 'Форма контроля',
+    'discipline_id': 'ID дисциплины',
+    'form': 'Форма аттестации',
+    'attempt_type': 'Тип попытки',
+    'grade': 'Оценка',
+    'date': 'Дата',
+    'teacher_id': 'ID преподавателя',
+    'operation_type': 'Тип операции',
+    'table_name': 'Имя таблицы',
+    'record_id': 'ID записи',
+    'old_data': 'Старые данные',
+    'new_data': 'New данные',
+    'passport_series': 'Серия паспорта',
+    'passport_number': 'Номер паспорта',
+    'passport_dept_code': 'Код подразделения',
+    'passport_issue_date': 'Дата выдачи',
+    'passport_issued_by': 'Кем выдан',
+    'snils': 'СНИЛС',
+    'region': 'Субъект РФ',
+    'district': 'Район',
+    'city': 'Город',
+    'street': 'Улица',
+    'building': 'Дом',
+    'block': 'Корпус',
+    'apartment': 'Квартира',
+    'postal_code': 'Почтовый индекс',
+    'phone': 'Телефон',
+    'email': 'Email'
+}
+
+
 @main_bp.route('/admin/dashboard')
 @login_required
 def admin_dashboard():
-    # Проверка роли: доступ только для Администратора
     if current_user.__class__.__name__ != 'Admin':
-        flash('Доступ запрещен. Эта страница доступна только сотрудникам деканата.', 'error')
+        flash('Доступ запрещен.', 'error')
+        return redirect(url_for('main.login'))
+    return render_template('admin_dashboard.html')
+
+
+@main_bp.route('/admin/view/<table_name>')
+@login_required
+def admin_view_table(table_name):
+    if current_user.__class__.__name__ != 'Admin':
+        flash('Доступ запрещен.', 'error')
         return redirect(url_for('main.login'))
 
-    events = AssessmentEvent.query.join(Student).join(Discipline).order_by(AssessmentEvent.date.desc()).all()
-    return render_template('admin_dashboard.html', events=events)
+    model = MODELS_MAP.get(table_name)
+    if not model:
+        abort(404)
+
+    query = model.query
+    search_query = request.args.get('search', '').strip()
+    search_by = request.args.get('search_by', 'all').strip()  # По умолчанию ищем по всем полям
+
+    # Динамическая фильтрация по поисковому запросу
+    if search_query:
+        cols_to_search = SEARCHABLE_COLUMNS.get(table_name, ['id'])
+
+        # Если выбран конкретный столбец и он есть в списке разрешенных
+        if search_by in cols_to_search:
+            col = getattr(model, search_by, None)
+            if col is not None:
+                if search_by == 'id' and search_query.isdigit():
+                    query = query.filter(col == int(search_query))
+                elif search_by != 'id':
+                    query = query.filter(col.ilike(f'%{search_query}%'))
+        else:
+            # Если выбрано "Все поля" или передано некорректное значение, ищем по всем разрешенным
+            conditions = []
+            for col_name in cols_to_search:
+                col = getattr(model, col_name, None)
+                if col is not None:
+                    if col_name == 'id' and search_query.isdigit():
+                        conditions.append(col == int(search_query))
+                    elif col_name != 'id':
+                        conditions.append(col.ilike(f'%{search_query}%'))
+
+            if conditions:
+                query = query.filter(or_(*conditions))
+
+    # Пагинация
+    page = request.args.get('page', 1, type=int)
+    per_page = 15
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    # Получаем имена колонок для отображения в таблице (исключаем пароли)
+    columns = [col.name for col in model.__table__.columns if 'password' not in col.name]
+
+    # Читаемые названия таблиц для меню
+    table_names_ru = {
+        'student': 'Студенты', 'teacher': 'Преподаватели', 'admin_user': 'Администраторы',
+        'study_group': 'Учебные группы', 'discipline': 'Дисциплины', 'study_plan': 'Учебные планы',
+        'study_direction': 'Направления', 'position': 'Должности', 'contact': 'Контакты',
+        'assessment_event': 'Зачётные мероприятия', 'action_log': 'Журнал действий',
+        'teacher_assignment': 'Нагрузка преподавателей', 'plan_discipline_link': 'План-Дисциплина'
+    }
+
+    # Формируем список для выпадающего меню поиска: (значение_в_html, отображаемое_имя)
+    searchable_cols_for_dropdown = [('all', 'Все поля')]
+    for col in SEARCHABLE_COLUMNS.get(table_name, ['id']):
+        ru_name = COLUMN_NAMES_RU.get(col, col.replace('_', ' ').capitalize())
+        searchable_cols_for_dropdown.append((col, ru_name))
+
+    return render_template(
+        'admin_view_table.html',
+        table_name=table_name,
+        table_name_ru=table_names_ru.get(table_name, table_name),
+        items=pagination.items,
+        pagination=pagination,
+        columns=columns,
+        search_query=search_query,
+        search_by=search_by,  # Передаем выбранное поле поиска
+        searchable_cols_for_dropdown=searchable_cols_for_dropdown,  # Передаем список для dropdown
+        available_tables=MODELS_MAP.keys(),
+        table_names_ru=table_names_ru,
+        column_names_ru=COLUMN_NAMES_RU
+    )
 
 
 @main_bp.route('/admin/add_assessment', methods=['GET', 'POST'])
@@ -89,22 +266,15 @@ def add_assessment():
             grade = request.form.get('grade')
             semester = int(request.form.get('semester'))
 
-            # 1. Получаем студента и его учебный план для валидации семестра
+            # 1. Проверка на опережение (как мы делали для преподавателя)
             student = Student.query.get(student_id)
-            if not student:
-                flash('Ошибка: студент не найден', 'error')
-                return redirect(url_for('main.add_assessment'))
-
-            max_semesters = student.group.plan.duration_semesters
-
-            # 2. Валидация семестра
-            if semester < 1 or semester > max_semesters:
+            if student and semester > student.group.current_semester:
                 flash(
-                    f'Ошибка: указан некорректный семестр. Максимальное количество семестров для группы {student.group.number} составляет {max_semesters}.',
+                    f'Ошибка: Нельзя выставлять оценки на опережение. Текущий семестр для группы {student.group.number} — {student.group.current_semester}.',
                     'error')
                 return redirect(url_for('main.add_assessment'))
 
-            # 3. Валидация лимита попыток (как было ранее)
+            # 2. Валидация лимита попыток
             unsuccessful_regular_attempts = AssessmentEvent.query.filter(
                 AssessmentEvent.student_id == student_id,
                 AssessmentEvent.discipline_id == discipline_id,
@@ -113,16 +283,14 @@ def add_assessment():
             ).count()
 
             if unsuccessful_regular_attempts >= 3 and attempt_type != 'комиссия':
-                flash(
-                    'Лимит обычных пересдач (3 попытки: основная + 2 пересдачи) исчерпан. Для данной дисциплины необходимо выбрать тип попытки "комиссия".',
-                    'error')
+                flash('Лимит обычных пересдач (3 попытки) исчерпан. Необходимо выбрать тип попытки "комиссия".',
+                      'error')
                 return redirect(url_for('main.add_assessment'))
 
-            # 4. Преобразуем строку даты в объект datetime.date
+            # 3. Преобразование даты и создание записи
             date_str = request.form.get('date')
             date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
 
-            # 5. Создаем объект мероприятия
             new_event = AssessmentEvent(
                 student_id=student_id,
                 discipline_id=discipline_id,
@@ -130,28 +298,27 @@ def add_assessment():
                 attempt_type=attempt_type,
                 grade=grade,
                 date=date_obj,
-                semester=semester,  # <-- Используем провалидированный семестр
+                semester=semester,
                 teacher_id=int(request.form.get('teacher_id'))
             )
 
             db.session.add(new_event)
             db.session.commit()
             flash('Результат зачётного мероприятия успешно добавлен', 'success')
-            return redirect(url_for('main.admin_dashboard'))
+            # Перенаправляем обратно на просмотр таблицы мероприятий
+            return redirect(url_for('main.admin_view_table', table_name='assessment_event'))
 
         except ValueError:
             flash('Ошибка валидации данных. Проверьте формат даты и числовые поля.', 'error')
             return redirect(url_for('main.add_assessment'))
 
-    # Для GET-запроса: определяем максимальный семестр для отображения в выпадающем списке
-    # Берем максимальное значение duration_semesters среди всех учебных планов в системе
+    # Для GET-запроса: подготовка данных для формы
     students = Student.query.all()
     disciplines = Discipline.query.all()
     teachers = Teacher.query.all()
 
-    max_semesters_display = 8  # Значение по умолчанию
+    max_semesters_display = 8
     if students:
-        # Находим максимальную продолжительность среди всех планов, привязанных к текущим студентам
         max_semesters_display = max([s.group.plan.duration_semesters for s in students])
 
     return render_template(
@@ -161,7 +328,6 @@ def add_assessment():
         teachers=teachers,
         max_semesters_display=max_semesters_display
     )
-
 
 @main_bp.route('/student/dashboard')
 @login_required
