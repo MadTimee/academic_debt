@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, abort
 from flask_login import login_user, logout_user, login_required, current_user
 from datetime import datetime
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from app import db, login_manager
 from app.models import (
     Admin, Student, Teacher, AssessmentEvent, Discipline, StudyGroup,
@@ -86,17 +86,17 @@ MODELS_MAP = {
 
 # Словарь колонок, по которым разрешен поиск для каждой таблицы
 SEARCHABLE_COLUMNS = {
-    'student': ['id', 'surname', 'name', 'patronymic', 'student_id_number', 'status'],
-    'teacher': ['id', 'surname', 'name', 'patronymic', 'work_email'],
-    'admin_user': ['id', 'surname', 'name', 'patronymic', 'work_email'],
+    'student': ['id', 'fio', 'student_id_number', 'status'],
+    'teacher': ['id', 'fio', 'work_email'],
+    'admin_user': ['id', 'fio', 'work_email'],
     'study_group': ['id', 'number', 'form_of_study', 'current_year', 'current_semester'],
     'discipline': ['id', 'name'],
     'study_plan': ['id', 'approval_year', 'duration_semesters'],
     'study_direction': ['id', 'level', 'code', 'name', 'profile'],
     'position': ['id', 'title', 'rank'],
     'contact': ['id', 'phone', 'email', 'snils'],
-    'assessment_event': ['id', 'form', 'attempt_type', 'grade', 'semester'],
-    'action_log': ['id', 'operation_type', 'table_name', 'record_id'],
+    'assessment_event': ['id', 'form', 'attempt_type', 'grade', 'semester', 'date'],
+    'action_log': ['id', 'operation_type', 'table_name', 'record_id', 'timestamp'],
     'teacher_assignment': ['id', 'semester'],
     'plan_discipline_link': ['id', 'semester', 'hours', 'assessment_form']
 }
@@ -104,6 +104,7 @@ SEARCHABLE_COLUMNS = {
 # Словарь для перевода названий колонок на русский язык
 COLUMN_NAMES_RU = {
     'id': 'ID',
+    'fio': 'ФИО',
     'surname': 'Фамилия',
     'name': 'Имя',
     'patronymic': 'Отчество',
@@ -184,24 +185,54 @@ def admin_view_table(table_name):
 
     query = model.query
     search_query = request.args.get('search', '').strip()
-    search_by = request.args.get('search_by', 'all').strip()  # По умолчанию ищем по всем полям
+    search_by = request.args.get('search_by', '').strip()
 
-    # Динамическая фильтрация по поисковому запросу
+    # Параметры для дат
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
+
+    # 1. Динамически получаем список колонок для отображения (исключая пароли)
+    columns = [col.name for col in model.__table__.columns if 'password' not in col.name]
+
+    # 2. Определяем, есть ли в таблице колонки с датами
+    date_columns = [col.name for col in model.__table__.columns
+                    if col.name in ['date', 'reg_date', 'passport_issue_date', 'timestamp']]
+    has_date_column = len(date_columns) > 0
+
+    # 3. Определяем, по какой колонке ищем
+    if not search_by or search_by not in columns:
+        search_by = columns[0] if columns else 'id'
+
+    # 4. Применяем фильтр по текстовому поиску
     if search_query:
+        conditions = []
         cols_to_search = SEARCHABLE_COLUMNS.get(table_name, ['id'])
 
-        # Если выбран конкретный столбец и он есть в списке разрешенных
-        if search_by in cols_to_search:
-            col = getattr(model, search_by, None)
-            if col is not None:
-                if search_by == 'id' and search_query.isdigit():
-                    query = query.filter(col == int(search_query))
-                elif search_by != 'id':
-                    query = query.filter(col.ilike(f'%{search_query}%'))
-        else:
-            # Если выбрано "Все поля" или передано некорректное значение, ищем по всем разрешенным
-            conditions = []
-            for col_name in cols_to_search:
+        for col_name in cols_to_search:
+            # Специальная обработка для виртуального поля ФИО
+            if col_name == 'fio':
+                surname_col = getattr(model, 'surname', None)
+                name_col = getattr(model, 'name', None)
+                patronymic_col = getattr(model, 'patronymic', None)
+
+                if surname_col and name_col:
+                    fio_expr = func.trim(
+                        func.coalesce(surname_col, '') + ' ' +
+                        func.coalesce(name_col, '') + ' ' +
+                        func.coalesce(patronymic_col, '')
+                    )
+                    conditions.append(fio_expr.ilike(f'%{search_query}%'))
+
+            # Обработка для полей с датами (если не используются поля date_from/date_to)
+            elif col_name in ['date', 'reg_date', 'passport_issue_date', 'timestamp']:
+                if not date_from and not date_to:
+                    col = getattr(model, col_name, None)
+                    if col is not None:
+                        formatted_date_col = func.strftime('%d.%m.%Y', col)
+                        conditions.append(formatted_date_col.ilike(f'%{search_query}%'))
+
+            # Стандартная обработка для остальных полей
+            else:
                 col = getattr(model, col_name, None)
                 if col is not None:
                     if col_name == 'id' and search_query.isdigit():
@@ -209,16 +240,56 @@ def admin_view_table(table_name):
                     elif col_name != 'id':
                         conditions.append(col.ilike(f'%{search_query}%'))
 
-            if conditions:
-                query = query.filter(or_(*conditions))
+        if conditions:
+            query = query.filter(or_(*conditions))
 
-    # Пагинация
+    # 5. Применяем фильтр по датам (ЕСЛИ ЕСТЬ КОЛОНКИ С ДАТАМИ)
+    if has_date_column and (date_from or date_to):
+        # Берем первую найденную колонку с датой
+        date_col_name = date_columns[0]
+        date_col = getattr(model, date_col_name)
+
+        def parse_date_part(date_str):
+            """Парсит строку даты в формате ДД.ММ.ГГГГ, ММ.ГГГГ или ГГГГ"""
+            parts = date_str.split('.')
+            if len(parts) == 3:
+                day, month, year = parts
+                if day.isdigit() and month.isdigit() and year.isdigit():
+                    return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+            elif len(parts) == 2:
+                month, year = parts
+                if month.isdigit() and year.isdigit():
+                    return f"{year}-{month.zfill(2)}"
+            elif len(parts) == 1:
+                year = parts[0]
+                if year.isdigit():
+                    return year
+            return None
+
+        # Применяем фильтр "с"
+        if date_from:
+            parsed_from = parse_date_part(date_from)
+            if parsed_from:
+                query = query.filter(date_col >= parsed_from)
+
+        # Применяем фильтр "по"
+        if date_to:
+            parsed_to = parse_date_part(date_to)
+            if parsed_to:
+                # Добавляем 1 день, чтобы включить весь указанный день/месяц/год
+                # Для SQLite используем строковое сравнение с добавлением '9' или '-'
+                if len(parsed_to) == 10:  # ГГГГ-ММ-ДД
+                    query = query.filter(date_col <= parsed_to)
+                elif len(parsed_to) == 7:  # ГГГГ-ММ
+                    # Ищем до конца месяца
+                    query = query.filter(date_col <= parsed_to + '-31')
+                elif len(parsed_to) == 4:  # ГГГГ
+                    query = query.filter(date_col <= parsed_to + '-12-31')
+
+    # 6. Пагинация
     page = request.args.get('page', 1, type=int)
     per_page = 15
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-
-    # Получаем имена колонок для отображения в таблице (исключаем пароли)
-    columns = [col.name for col in model.__table__.columns if 'password' not in col.name]
 
     # Читаемые названия таблиц для меню
     table_names_ru = {
@@ -229,11 +300,19 @@ def admin_view_table(table_name):
         'teacher_assignment': 'Нагрузка преподавателей', 'plan_discipline_link': 'План-Дисциплина'
     }
 
-    # Формируем список для выпадающего меню поиска: (значение_в_html, отображаемое_имя)
-    searchable_cols_for_dropdown = [('all', 'Все поля')]
-    for col in SEARCHABLE_COLUMNS.get(table_name, ['id']):
+    # Формируем список для выпадающего меню поиска
+    searchable_cols_for_dropdown = []
+    for col in columns:
+        # Пропускаем отдельные поля ФИО
+        if col in ['surname', 'name', 'patronymic']:
+            continue
         ru_name = COLUMN_NAMES_RU.get(col, col.replace('_', ' ').capitalize())
         searchable_cols_for_dropdown.append((col, ru_name))
+
+    # Добавляем виртуальное поле 'fio'
+    if 'fio' not in [c[0] for c in searchable_cols_for_dropdown] and hasattr(model, 'surname') and hasattr(model,
+                                                                                                           'name'):
+        searchable_cols_for_dropdown.insert(1, ('fio', 'ФИО'))
 
     return render_template(
         'admin_view_table.html',
@@ -243,8 +322,11 @@ def admin_view_table(table_name):
         pagination=pagination,
         columns=columns,
         search_query=search_query,
-        search_by=search_by,  # Передаем выбранное поле поиска
-        searchable_cols_for_dropdown=searchable_cols_for_dropdown,  # Передаем список для dropdown
+        search_by=search_by,
+        date_from=date_from,
+        date_to=date_to,
+        has_date_column=has_date_column,  # Передаем флаг в шаблон
+        searchable_cols_for_dropdown=searchable_cols_for_dropdown,
         available_tables=MODELS_MAP.keys(),
         table_names_ru=table_names_ru,
         column_names_ru=COLUMN_NAMES_RU

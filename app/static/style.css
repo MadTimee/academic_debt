@@ -735,40 +735,129 @@ details[open] .discipline-header::after {
     border-color: #dc3545;
 }
 
-/* Обновление стилей формы поиска для выравнивания элементов */
+/* Обновленные стили для формы поиска */
 .search-form {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
-    align-items: center; /* Выравнивание по вертикали по центру */
+    align-items: flex-start;
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    width: 100%;
+}
+
+.search-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.search-row.date-range {
+    background: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    border: 1px solid #ced4da;
 }
 
 .search-select {
-    padding: 10px 15px;
+    padding: 10px 12px;
     border: 1px solid #ced4da;
     border-radius: 4px;
     font-size: 0.95rem;
     background-color: white;
     cursor: pointer;
-    min-width: 160px; /* Фиксированная минимальная ширина, чтобы текст не обрезался */
+    min-width: 140px;
     color: #495057;
 }
 
-.search-select:focus {
-    outline: none;
-    border-color: #003366;
-    box-shadow: 0 0 0 2px rgba(0, 51, 102, 0.1);
-}
-
-.search-form input {
-    padding: 10px 15px;
+.search-form input[type="text"] {
+    padding: 10px 12px;
     border: 1px solid #ced4da;
     border-radius: 4px;
-    width: 250px; /* Немного уменьшили ширину, так как добавился селект */
     font-size: 0.95rem;
+    min-width: 200px;
 }
 
-.search-form input:focus {
-    outline: none;
-    border-color: #003366;
-    box-shadow: 0 0 0 2px rgba(0, 51, 102, 0.1);
+/* Стили для полей даты */
+.date-input {
+    width: 140px !important;
+    min-width: 120px !important;
+    text-align: center;
+    padding: 8px 10px !important;
+    font-size: 0.9rem !important;
+}
+
+.date-range-label {
+    font-weight: 600;
+    color: #495057;
+    font-size: 0.9rem;
+    margin-right: 5px;
+}
+
+.date-range-sep {
+    color: #6c757d;
+    font-weight: bold;
+    margin: 0 4px;
+}
+
+.search-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-left: auto;
+}
+
+.search-form .btn-primary,
+.search-form .btn-secondary {
+    padding: 10px 20px;
+    width: auto !important;
+    margin-top: 0 !important;
+    white-space: nowrap;
+}
+
+/* Убираем required у текстового поля */
+.search-form input[type="text"]:not(:required) {
+    border-color: #ced4da;
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+    .search-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .search-row {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+    .search-row input,
+    .search-select {
+        flex: 1;
+        min-width: 100px;
+    }
+    .date-input {
+        width: 100% !important;
+        min-width: 80px !important;
+        flex: 1;
+    }
+    .date-range {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    .search-actions {
+        margin-left: 0;
+        justify-content: stretch;
+        flex-wrap: wrap;
+    }
+    .search-actions .btn-primary,
+    .search-actions .btn-secondary {
+        flex: 1;
+        text-align: center;
+        min-width: 100px;
+    }
+    .search-actions .btn-secondary {
+        margin-left: 0 !important;
+    }
 }

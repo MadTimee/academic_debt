@@ -7,7 +7,7 @@
         <ul class="nav-links">
             {% for key, name in table_names_ru.items() %}
                 <li>
-                    <a href="{{ url_for('main.admin_view_table', table_name=key, search=search_query) }}" 
+                    <a href="{{ url_for('main.admin_view_table', table_name=key) }}"
                        class="{% if table_name == key %}active{% endif %}">
                         {{ name }}
                     </a>
@@ -20,21 +20,39 @@
     <main class="admin-content">
         <div class="content-header">
             <h2>{{ table_name_ru }}</h2>
-            
+
             <!-- Форма поиска -->
             <form method="GET" action="{{ url_for('main.admin_view_table', table_name=table_name) }}" class="search-form">
-                <select name="search_by" class="search-select">
-                    {% for col_val, col_name in searchable_cols_for_dropdown %}
-                        <option value="{{ col_val }}" {% if search_by == col_val %}selected{% endif %}>
-                            {{ col_name }}
-                        </option>
-                    {% endfor %}
-                </select>
-                <input type="text" name="search" placeholder="Введите значение..." value="{{ search_query }}">
-                <button type="submit" class="btn-primary" style="width: auto; margin-top: 0;">Найти</button>
-                {% if search_query %}
-                    <a href="{{ url_for('main.admin_view_table', table_name=table_name) }}" class="btn-secondary" style="width: auto; margin-top: 0; text-decoration: none; padding: 12px;">Сбросить</a>
+                <div class="search-row">
+                    <!-- Выбор колонки для поиска -->
+                    <select name="search_by" class="search-select" required>
+                        {% for col_val, col_name in searchable_cols_for_dropdown %}
+                            <option value="{{ col_val }}" {% if search_by == col_val %}selected{% endif %}>
+                                {{ col_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+
+                    <!-- Поисковый запрос (убран required) -->
+                    <input type="text" name="search" placeholder="Введите значение..." value="{{ search_query }}">
+                </div>
+
+                <!-- Блок поиска по дате (показываем только если есть колонки с датами) -->
+                {% if has_date_column %}
+                <div class="search-row date-range">
+                    <span class="date-range-label">Дата:</span>
+                    <input type="text" name="date_from" placeholder="ДД.ММ.ГГГГ" value="{{ date_from }}" class="date-input">
+                    <span class="date-range-sep">—</span>
+                    <input type="text" name="date_to" placeholder="ДД.ММ.ГГГГ" value="{{ date_to }}" class="date-input">
+                </div>
                 {% endif %}
+
+                <div class="search-actions">
+                    <button type="submit" class="btn-primary" style="width: auto; margin-top: 0;">Найти</button>
+                    {% if search_query or date_from or date_to %}
+                        <a href="{{ url_for('main.admin_view_table', table_name=table_name) }}" class="btn-secondary" style="width: auto; margin-top: 0; text-decoration: none; padding: 12px;">Сбросить</a>
+                    {% endif %}
+                </div>
             </form>
         </div>
 
@@ -57,8 +75,12 @@
                                         {% set value = item | attr(col) %}
                                         {% if value is none %}
                                             <span class="text-muted">-</span>
-                                        {% elif col == 'date' or col == 'reg_date' or col == 'passport_issue_date' %}
-                                            {{ value.strftime('%d.%m.%Y') }}
+                                        {% elif col == 'date' or col == 'reg_date' or col == 'passport_issue_date' or col == 'timestamp' %}
+                                            {% if col == 'timestamp' %}
+                                                {{ value.strftime('%d.%m.%Y %H:%M') }}
+                                            {% else %}
+                                                {{ value.strftime('%d.%m.%Y') }}
+                                            {% endif %}
                                         {% else %}
                                             {{ value }}
                                         {% endif %}
@@ -73,7 +95,7 @@
                 {% if pagination.pages > 1 %}
                 <div class="pagination-container">
                     {% if pagination.has_prev %}
-                        <a href="{{ url_for('main.admin_view_table', table_name=table_name, page=pagination.prev_num, search=search_query, search_by=search_by) }}" class="nav-btn">&larr; Назад</a>
+                        <a href="{{ url_for('main.admin_view_table', table_name=table_name, page=pagination.prev_num, search=search_query, search_by=search_by, date_from=date_from, date_to=date_to) }}" class="nav-btn">&larr; Назад</a>
                     {% else %}
                         <span class="nav-btn disabled">&larr; Назад</span>
                     {% endif %}
@@ -81,7 +103,7 @@
                     <span class="page-info">Страница {{ pagination.page }} из {{ pagination.pages }}</span>
 
                     {% if pagination.has_next %}
-                        <a href="{{ url_for('main.admin_view_table', table_name=table_name, page=pagination.next_num, search=search_query, search_by=search_by) }}" class="nav-btn">Вперед &rarr;</a>
+                        <a href="{{ url_for('main.admin_view_table', table_name=table_name, page=pagination.next_num, search=search_query, search_by=search_by, date_from=date_from, date_to=date_to) }}" class="nav-btn">Вперед &rarr;</a>
                     {% else %}
                         <span class="nav-btn disabled">Вперед &rarr;</span>
                     {% endif %}
