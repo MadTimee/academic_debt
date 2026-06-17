@@ -99,5 +99,64 @@
             </div>
         </a>
     </div>
+
+    {% if current_user.position.rank == 5 %}
+    <div class="semester-transition-container">
+        <button class="btn-semester-transition" onclick="openSemesterModal()">
+            <span class="icon">📅</span>
+            Переход на новый семестр
+        </button>
+        <p class="semester-hint">Перевод всех групп на следующий семестр. Только для системного администратора.</p>
+    </div>
+    {% endif %}
 </div>
+
+<div id="semesterTransitionModal" class="modal">
+    <div class="modal-content modal-semester">
+        <span class="close-modal" onclick="closeSemesterModal()">&times;</span>
+
+        <div class="semester-modal-header">
+            <span class="semester-modal-icon">📅</span>
+            <h3>Переход на новый семестр</h3>
+        </div>
+
+        <div class="semester-modal-body">
+            <p class="semester-modal-warning">
+                Вы собираетесь выполнить переход на новый семестр для <strong>всех групп</strong>.
+            </p>
+
+            <div class="semester-modal-warning-box">
+                <p><strong>Это действие необратимо!</strong></p>
+                <p>Убедитесь, что все данные за текущий семестр внесены.</p>
+            </div>
+        </div>
+
+        <div class="semester-modal-actions">
+            <button class="btn-secondary" onclick="closeSemesterModal()">Отмена</button>
+            <form id="semesterTransitionForm" method="POST" action="{{ url_for('main.advance_semester') }}" style="display: inline;">
+                <button type="submit" class="btn-semester-confirm">
+                    Подтвердить переход
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openSemesterModal() {
+        document.getElementById('semesterTransitionModal').style.display = 'block';
+    }
+
+    function closeSemesterModal() {
+        document.getElementById('semesterTransitionModal').style.display = 'none';
+    }
+
+    // Закрытие при клике вне модального окна
+    window.onclick = function(event) {
+        const modal = document.getElementById('semesterTransitionModal');
+        if (event.target == modal) {
+            closeSemesterModal();
+        }
+    }
+</script>
 {% endblock %}

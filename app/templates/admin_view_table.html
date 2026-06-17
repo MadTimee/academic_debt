@@ -21,10 +21,16 @@
         <div class="content-header">
             <h2>{{ table_name_ru }}</h2>
 
+            <!-- Кнопка создания новой записи -->
+            {% if can_edit and table_name != 'action_log' %}
+                <button class="btn-primary" onclick="openCreateModal('{{ table_name }}')" style="width: auto; padding: 10px 20px;">
+                    + Добавить запись
+                </button>
+            {% endif %}
+
             <!-- Форма поиска -->
             <form method="GET" action="{{ url_for('main.admin_view_table', table_name=table_name) }}" class="search-form">
                 <div class="search-row">
-                    <!-- Выбор колонки для поиска -->
                     <select name="search_by" class="search-select" required>
                         {% for col_val, col_name in searchable_cols_for_dropdown %}
                             <option value="{{ col_val }}" {% if search_by == col_val %}selected{% endif %}>
@@ -32,12 +38,9 @@
                             </option>
                         {% endfor %}
                     </select>
-
-                    <!-- Поисковый запрос (убран required) -->
                     <input type="text" name="search" placeholder="Введите значение..." value="{{ search_query }}">
                 </div>
 
-                <!-- Блок поиска по дате (показываем только если есть колонки с датами) -->
                 {% if has_date_column %}
                 <div class="search-row date-range">
                     <span class="date-range-label">Дата:</span>
@@ -62,6 +65,10 @@
                 <table class="data-table admin-table">
                     <thead>
                         <tr>
+                            <!-- Добавляем колонку для действий -->
+                            {% if can_edit and table_name != 'action_log' %}
+                                <th style="width: 120px;">Действия</th>
+                            {% endif %}
                             {% for col in columns %}
                                 <th>{{ column_names_ru.get(col, col | replace('_', ' ') | capitalize) }}</th>
                             {% endfor %}
@@ -70,17 +77,115 @@
                     <tbody>
                         {% for item in items %}
                             <tr>
+                                <!-- Колонка с кнопками действий -->
+                                {% if can_edit and table_name != 'action_log' %}
+                                    <td>
+                                        <div class="action-buttons">
+                                            <!-- Для таблицы position проверяем, не максимальная ли это должность -->
+                                            {% if table_name != 'position' or item.rank != 5 %}
+                                                <button class="btn-edit" onclick="openEditModal('{{ table_name }}', {{ item.id }})" title="Редактировать">
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                                    </svg>
+                                                </button>
+                                            {% else %}
+                                                <span class="text-muted" title="Должность с максимальным рангом защищена от изменений"></span>
+                                            {% endif %}
+
+                                            <!-- Для удаления тоже проверяем -->
+                                            {% if table_name != 'position' or item.rank != 5 %}
+                                                <button class="btn-delete" onclick="openDeleteModal('{{ table_name }}', {{ item.id }}, '{{ item.surname ~ ' ' ~ item.name if item.surname else item.title or '#' }}')" title="Удалить">
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M3 6h18"/>
+                                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                                    </svg>
+                                                </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                {% endif %}
+
+                                <!-- Данные записи -->
                                 {% for col in columns %}
                                     <td>
                                         {% set value = item | attr(col) %}
-                                        {% if value is none %}
+
+                                        <!-- Специальная обработка для прав должностей -->
+                                        {% if table_name == 'position' and col == 'permissions_mask' %}
+                                            {% set perms = item.get_permissions_list() %}
+                                            <div class="permissions-badge">
+                                                {% for perm_table_name, info in perms.items() %}
+                                                    {% if info.has_permission %}
+                                                        <span class="perm-tag perm-{{ perm_table_name }}">{{ info.name_ru }}</span>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </div>
+
+                                        <!-- Специальная обработка для ранга должности -->
+                                        {% elif table_name == 'position' and col == 'rank' %}
+                                            <span class="rank-badge rank-{{ value }}">
+                                                {{ value }}
+                                                {% if value == 5 %}
+                                                    <span class="rank-crown">(макс.)</span>
+                                                {% endif %}
+                                            </span>
+
+                                        <!-- Специальная обработка для журнала аудита: old_data и new_data -->
+                                        {% elif table_name == 'action_log' and (col == 'old_data' or col == 'new_data') %}
+                                            {% if value %}
+                                                {% set parsed = value | from_json %}
+                                                {% if parsed is mapping %}
+                                                    <div class="diff-data">
+                                                        {% for field, changes in parsed.items() %}
+                                                            {% set field_name = column_names_ru.get(field, field) %}
+                                                            <div class="diff-item">
+                                                                <span class="diff-field">{{ field_name }}</span>
+                                                                {% if col == 'old_data' %}
+                                                                    {% set old_val = changes.old if changes.old is not none else '(пусто)' %}
+                                                                    <span class="diff-old {% if old_val|length > 30 %}truncated{% endif %}"
+                                                                          title="{{ old_val }}">{{ old_val }}</span>
+                                                                {% else %}
+                                                                    {% set new_val = changes.new if changes.new is not none else '(пусто)' %}
+                                                                    <span class="diff-new {% if new_val|length > 30 %}truncated{% endif %}"
+                                                                          title="{{ new_val }}">{{ new_val }}</span>
+                                                                {% endif %}
+                                                            </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                {% else %}
+                                                    {% if value|length > 50 %}
+                                                        <span title="{{ value }}">{{ value[:50] }}...</span>
+                                                    {% else %}
+                                                        {{ value }}
+                                                    {% endif %}
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+
+                                        <!-- Специальная обработка для типа операции в журнале аудита -->
+                                        {% elif table_name == 'action_log' and col == 'operation_type' %}
+                                            <span class="operation-badge operation-{{ value|lower }}">
+                                                {% if value == 'INSERT' %}Добавление
+                                                {% elif value == 'UPDATE' %}Изменение
+                                                {% elif value == 'DELETE' %}Удаление
+                                                {% else %}{{ value }}{% endif %}
+                                            </span>
+
+                                        <!-- Обработка NULL значений -->
+                                        {% elif value is none %}
                                             <span class="text-muted">-</span>
+
+                                        <!-- Обработка дат -->
                                         {% elif col == 'date' or col == 'reg_date' or col == 'passport_issue_date' or col == 'timestamp' %}
                                             {% if col == 'timestamp' %}
                                                 {{ value.strftime('%d.%m.%Y %H:%M') }}
                                             {% else %}
                                                 {{ value.strftime('%d.%m.%Y') }}
                                             {% endif %}
+
+                                        <!-- Обычные значения -->
                                         {% else %}
                                             {{ value }}
                                         {% endif %}
@@ -91,22 +196,32 @@
                     </tbody>
                 </table>
 
-                <!-- Пагинация -->
+                <!-- Улучшенная пагинация -->
                 {% if pagination.pages > 1 %}
                 <div class="pagination-container">
                     {% if pagination.has_prev %}
-                        <a href="{{ url_for('main.admin_view_table', table_name=table_name, page=pagination.prev_num, search=search_query, search_by=search_by, date_from=date_from, date_to=date_to) }}" class="nav-btn">&larr; Назад</a>
+                        <a href="{{ url_for('main.admin_view_table', table_name=table_name, page=pagination.prev_num, search=search_query, search_by=search_by, date_from=date_from, date_to=date_to) }}" class="nav-btn">&larr;</a>
                     {% else %}
-                        <span class="nav-btn disabled">&larr; Назад</span>
+                        <span class="nav-btn disabled">&larr;</span>
                     {% endif %}
 
-                    <span class="page-info">Страница {{ pagination.page }} из {{ pagination.pages }}</span>
+                    {% for p in range(1, pagination.pages + 1) %}
+                        {% if p == pagination.page %}
+                            <span class="page-number active">{{ p }}</span>
+                        {% elif p == 1 or p == pagination.pages or (p >= pagination.page - 2 and p <= pagination.page + 2) %}
+                            <a href="{{ url_for('main.admin_view_table', table_name=table_name, page=p, search=search_query, search_by=search_by, date_from=date_from, date_to=date_to) }}" class="page-number">{{ p }}</a>
+                        {% elif p == pagination.page - 3 or p == pagination.page + 3 %}
+                            <span class="page-number dots">...</span>
+                        {% endif %}
+                    {% endfor %}
 
                     {% if pagination.has_next %}
-                        <a href="{{ url_for('main.admin_view_table', table_name=table_name, page=pagination.next_num, search=search_query, search_by=search_by, date_from=date_from, date_to=date_to) }}" class="nav-btn">Вперед &rarr;</a>
+                        <a href="{{ url_for('main.admin_view_table', table_name=table_name, page=pagination.next_num, search=search_query, search_by=search_by, date_from=date_from, date_to=date_to) }}" class="nav-btn">&rarr;</a>
                     {% else %}
-                        <span class="nav-btn disabled">Вперед &rarr;</span>
+                        <span class="nav-btn disabled">&rarr;</span>
                     {% endif %}
+
+                    <span class="page-info">Всего: {{ pagination.total }} записей</span>
                 </div>
                 {% endif %}
 
@@ -116,4 +231,413 @@
         </div>
     </main>
 </div>
+
+<!-- ========================================== -->
+<!-- МОДАЛЬНОЕ ОКНО ДЛЯ РЕДАКТИРОВАНИЯ -->
+<!-- ========================================== -->
+<div id="editModal" class="modal">
+    <div class="modal-content modal-edit">
+        <span class="close-modal" onclick="closeEditModal()">&times;</span>
+        <h3>Редактирование записи</h3>
+        <p id="modal_record_info" style="color: #6c757d; margin-bottom: 15px;"></p>
+
+        <form id="editForm" method="POST">
+            <div id="editFormFields">
+                <!-- Поля будут динамически загружены через JavaScript -->
+            </div>
+            <button type="submit" class="btn-primary">Сохранить изменения</button>
+        </form>
+    </div>
+</div>
+
+<!-- ========================================== -->
+<!-- JAVASCRIPT -->
+<!-- ========================================== -->
+<script>
+    // Словарь для перевода названий полей на русский
+    const columnNamesRu = {
+        'id': 'ID',
+        'surname': 'Фамилия',
+        'name': 'Имя',
+        'patronymic': 'Отчество',
+        'student_id_number': 'Номер зачётки',
+        'status': 'Статус',
+        'group_id': 'ID группы',
+        'contact_id': 'ID контакта',
+        'reg_date': 'Дата регистрации',
+        'login': 'Логин',
+        'work_email': 'Рабочая почта',
+        'position_id': 'ID должности',
+        'title': 'Название должности',
+        'rank': 'Ранг',
+        'permissions_desc': 'Описание прав',
+        'permissions_mask': 'Права доступа',
+        'level': 'Уровень подготовки',
+        'code': 'Код направления',
+        'profile': 'Профиль',
+        'direction_id': 'ID направления',
+        'approval_year': 'Год утверждения',
+        'duration_semesters': 'Длительность (сем.)',
+        'number': 'Номер группы',
+        'form_of_study': 'Форма обучения',
+        'current_year': 'Текущий курс',
+        'current_semester': 'Текущий семестр',
+        'plan_id': 'ID учебного плана',
+        'semester': 'Семестр',
+        'hours': 'Количество часов',
+        'assessment_form': 'Форма контроля',
+        'discipline_id': 'ID дисциплины',
+        'form': 'Форма аттестации',
+        'attempt_type': 'Тип попытки',
+        'grade': 'Оценка',
+        'date': 'Дата',
+        'teacher_id': 'ID преподавателя',
+        'operation_type': 'Тип операции',
+        'table_name': 'Имя таблицы',
+        'record_id': 'ID записи',
+        'old_data': 'Старые данные',
+        'new_data': 'Новые данные',
+        'passport_series': 'Серия паспорта',
+        'passport_number': 'Номер паспорта',
+        'passport_dept_code': 'Код подразделения',
+        'passport_issue_date': 'Дата выдачи',
+        'passport_issued_by': 'Кем выдан',
+        'snils': 'СНИЛС',
+        'region': 'Субъект РФ',
+        'district': 'Район',
+        'city': 'Город',
+        'street': 'Улица',
+        'building': 'Дом',
+        'block': 'Корпус',
+        'apartment': 'Квартира',
+        'postal_code': 'Почтовый индекс',
+        'phone': 'Телефон',
+        'email': 'Email',
+        'timestamp': 'Дата и время',
+        'admin_id': 'ID администратора',
+        'student_id': 'ID студента',
+        'record_id': 'ID записи',
+        'permissions_mask': 'Права доступа'
+    };
+
+    function openEditModal(tableName, recordId) {
+        const modal = document.getElementById('editModal');
+        const form = document.getElementById('editForm');
+        const fieldsContainer = document.getElementById('editFormFields');
+        const info = document.getElementById('modal_record_info');
+
+        modal.style.display = 'block';
+        info.textContent = 'Загрузка данных...';
+        form.action = `/admin/update/${tableName}/${recordId}`;
+
+        fetch(`/admin/get_record/${tableName}/${recordId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    info.textContent = 'Ошибка: ' + data.error;
+                    return;
+                }
+
+                info.textContent = `Редактирование записи #${data.id}`;
+
+                let html = '';
+                // Исключаем поля, которые не должны редактироваться
+                const excludeFields = ['id', 'permissions_list', 'password_hash', 'is_max_rank']; // <-- ДОБАВИЛИ is_max_rank
+
+                // Определяем, максимальная ли должность (ранг 5)
+                const isMaxRank = (data.rank === 5) || false;
+
+                for (const [key, value] of Object.entries(data)) {
+                    // Пропускаем исключенные поля
+                    if (excludeFields.includes(key)) continue;
+                    if (key.includes('password')) continue;
+
+                    // Получаем русское название из словаря
+                    const label = columnNamesRu[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+                    // Для таблицы position блокируем поля rank и permissions_mask у максимальной должности
+                    const isLocked = isMaxRank && (key === 'rank' || key === 'permissions_mask');
+                    const disabledAttr = isLocked ? 'disabled' : '';
+                    const lockHint = isLocked ? ' (поле заблокировано)' : '';
+
+                    // Для поля rank добавляем подсказку о максимальном ранге
+                    let additionalHint = '';
+                    if (key === 'rank' && !isLocked) {
+                        additionalHint = ' (максимальный ранг - 4)';
+                    }
+
+                    // Для полей с датами
+                    if (key === 'date' || key === 'reg_date' || key === 'passport_issue_date' || key === 'timestamp') {
+                        let dateValue = '';
+                        if (value) {
+                            if (typeof value === 'string' && value.includes('T')) {
+                                dateValue = value.split('T')[0];
+                            } else if (typeof value === 'string' && value.length === 10) {
+                                dateValue = value;
+                            }
+                        }
+                        html += `
+                            <div class="form-group">
+                                <label for="field_${key}">${label}${lockHint}${additionalHint}:</label>
+                                <input type="date" id="field_${key}" name="${key}" value="${dateValue}" ${disabledAttr}>
+                                ${isLocked ? '<span class="field-locked"></span>' : ''}
+                            </div>
+                        `;
+                    }
+                    // Для булевых полей
+                    else if (typeof value === 'boolean') {
+                        html += `
+                            <div class="form-group">
+                                <label for="field_${key}">${label}${lockHint}${additionalHint}:</label>
+                                <select id="field_${key}" name="${key}" ${disabledAttr}>
+                                    <option value="true" ${value ? 'selected' : ''}>Да</option>
+                                    <option value="false" ${!value ? 'selected' : ''}>Нет</option>
+                                </select>
+                                ${isLocked ? '<span class="field-locked"></span>' : ''}
+                            </div>
+                        `;
+                    }
+                    // Для обычных полей
+                    else {
+                        const displayValue = (value !== null && value !== undefined) ? value : '';
+                        html += `
+                            <div class="form-group">
+                                <label for="field_${key}">${label}${lockHint}${additionalHint}:</label>
+                                <input type="text" id="field_${key}" name="${key}" value="${displayValue}" ${disabledAttr}>
+                                ${isLocked ? '<span class="field-locked"></span>' : ''}
+                            </div>
+                        `;
+                    }
+                }
+
+                fieldsContainer.innerHTML = html;
+                info.textContent = `Редактирование записи #${data.id}`;
+            })
+            .catch(error => {
+                info.textContent = 'Ошибка загрузки данных: ' + error;
+            });
+    }
+
+    function closeEditModal() {
+        document.getElementById('editModal').style.display = 'none';
+    }
+
+    window.onclick = function(event) {
+        const modal = document.getElementById('editModal');
+        if (event.target == modal) {
+            closeEditModal();
+        }
+    }
+</script>
+
+<!-- ========================================== -->
+<!-- МОДАЛЬНОЕ ОКНО ДЛЯ СОЗДАНИЯ -->
+<!-- ========================================== -->
+<div id="createModal" class="modal">
+    <div class="modal-content modal-edit">
+        <span class="close-modal" onclick="closeCreateModal()">&times;</span>
+        <h3>Создание новой записи</h3>
+        <p id="modal_create_info" style="color: #6c757d; margin-bottom: 15px;">Заполните поля для создания новой записи.</p>
+
+        <form id="createForm" method="POST">
+            <div id="createFormFields">
+                <!-- Поля будут динамически загружены через JavaScript -->
+            </div>
+            <button type="submit" class="btn-primary">Создать</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openCreateModal(tableName) {
+        const modal = document.getElementById('createModal');
+        const form = document.getElementById('createForm');
+        const fieldsContainer = document.getElementById('createFormFields');
+        const info = document.getElementById('modal_create_info');
+
+        modal.style.display = 'block';
+        info.textContent = 'Загрузка полей для создания...';
+        form.action = `/admin/create/${tableName}`;
+
+        // Загружаем структуру таблицы
+        fetch(`/admin/get_table_structure/${tableName}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    info.textContent = 'Ошибка: ' + data.error;
+                    return;
+                }
+
+                info.textContent = `Создание новой записи в таблице "${tableName}"`;
+
+                let html = '';
+                const excludeFields = ['id', 'permissions_list', 'password_hash'];
+
+                for (const [key, fieldInfo] of Object.entries(data)) {
+                    if (excludeFields.includes(key)) continue;
+                    if (key.includes('password')) continue;
+
+                    const label = columnNamesRu[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+                    // Для таблицы position запрещаем создание с рангом 5
+                    let additionalHint = '';
+                    let maxValue = '';
+                    if (tableName === 'position' && key === 'rank') {
+                        additionalHint = ' (максимальный ранг - 4)';
+                        maxValue = 'max="4"';
+                    }
+
+                    // Для полей с датами
+                    if (key === 'date' || key === 'reg_date' || key === 'passport_issue_date' || key === 'timestamp') {
+                        html += `
+                            <div class="form-group">
+                                <label for="create_field_${key}">${label}:</label>
+                                <input type="date" id="create_field_${key}" name="${key}">
+                            </div>
+                        `;
+                    }
+                    // Для текстовых полей
+                    else {
+                        html += `
+                            <div class="form-group">
+                                <label for="create_field_${key}">${label}${additionalHint}:</label>
+                                <input type="text" id="create_field_${key}" name="${key}" ${maxValue}>
+                            </div>
+                        `;
+                    }
+                }
+
+                fieldsContainer.innerHTML = html;
+                info.textContent = `Создание новой записи в таблице "${tableName}"`;
+            })
+            .catch(error => {
+                info.textContent = 'Ошибка загрузки данных: ' + error;
+            });
+    }
+
+    function closeCreateModal() {
+        document.getElementById('createModal').style.display = 'none';
+    }
+
+    window.onclick = function(event) {
+        const modal = document.getElementById('editModal');
+        if (event.target == modal) {
+            closeEditModal();
+        }
+        const createModal = document.getElementById('createModal');
+        if (event.target == createModal) {
+            closeCreateModal();
+        }
+    }
+</script>
+
+<!-- ========================================== -->
+<!-- МОДАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ УДАЛЕНИЯ -->
+<!-- ========================================== -->
+<div id="deleteModal" class="modal">
+    <div class="modal-content modal-delete">
+        <span class="close-modal" onclick="closeDeleteModal()">&times;</span>
+        <h3>Подтверждение удаления</h3>
+        <p id="delete_modal_message" style="color: #495057; margin: 15px 0;">
+            Вы уверены, что хотите удалить эту запись?
+        </p>
+        <div id="delete_modal_dependencies" style="display: none; background: #fff3cd; padding: 12px; border-radius: 4px; margin: 10px 0; border: 1px solid #ffc107;">
+            <p style="color: #856404; margin: 0; font-weight: bold;">Внимание!</p>
+            <p id="delete_modal_dep_list" style="color: #856404; margin: 5px 0 0 0; font-size: 0.9rem;"></p>
+            <p style="color: #856404; margin: 5px 0 0 0; font-size: 0.85rem;">Удаление этой записи также удалит все связанные данные.</p>
+        </div>
+        <p id="delete_modal_warning" style="color: #dc3545; font-size: 0.9rem; margin-bottom: 15px;">
+            Это действие необратимо!
+        </p>
+        <div class="delete-modal-actions">
+            <button class="btn-secondary" onclick="closeDeleteModal()" style="width: auto; padding: 10px 25px;">Отмена</button>
+            <form id="deleteForm" method="POST" style="display: inline;">
+                <input type="hidden" name="force_delete" id="force_delete" value="false">
+                <button type="submit" class="btn-danger" id="delete_confirm_btn" style="width: auto; padding: 10px 25px;">Удалить</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentDeleteData = {};
+
+    function openDeleteModal(tableName, recordId, recordInfo = '') {
+        const modal = document.getElementById('deleteModal');
+        const form = document.getElementById('deleteForm');
+        const message = document.getElementById('delete_modal_message');
+        const warning = document.getElementById('delete_modal_warning');
+        const depsBlock = document.getElementById('delete_modal_dependencies');
+        const depList = document.getElementById('delete_modal_dep_list');
+        const confirmBtn = document.getElementById('delete_confirm_btn');
+        const forceDeleteInput = document.getElementById('force_delete');
+
+        // Сохраняем данные для проверки зависимостей
+        currentDeleteData = { tableName, recordId };
+
+        modal.style.display = 'block';
+        form.action = `/admin/delete/${tableName}/${recordId}`;
+
+        if (recordInfo) {
+            message.textContent = `Вы уверены, что хотите удалить запись "${recordInfo}"?`;
+        } else {
+            message.textContent = 'Вы уверены, что хотите удалить эту запись?';
+        }
+
+        // Проверяем наличие зависимостей через API
+        fetch(`/admin/check_dependencies/${tableName}/${recordId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.dependencies && data.dependencies.length > 0) {
+                    // Для таблицы contact - запрещаем удаление
+                    if (tableName === 'contact') {
+                        depsBlock.style.display = 'block';
+                        depList.textContent = data.dependencies.join(', ');
+                        warning.textContent = 'Невозможно удалить! Контакт используется в других таблицах.';
+                        confirmBtn.disabled = true;
+                        confirmBtn.textContent = 'Удаление запрещено';
+                        confirmBtn.style.opacity = '0.6';
+                        forceDeleteInput.value = 'false';
+                    } else {
+                        // Для остальных таблиц - разрешаем с зависимостями
+                        depsBlock.style.display = 'block';
+                        depList.textContent = data.dependencies.join(', ');
+                        warning.textContent = 'Внимание! Удаление затронет связанные данные.';
+                        confirmBtn.disabled = false;
+                        confirmBtn.textContent = 'Удалить с зависимостями';
+                        confirmBtn.style.opacity = '1';
+                        forceDeleteInput.value = 'true';
+                    }
+                } else {
+                    // Нет зависимостей - обычное удаление
+                    depsBlock.style.display = 'none';
+                    warning.textContent = 'Это действие необратимо!';
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Удалить';
+                    confirmBtn.style.opacity = '1';
+                    forceDeleteInput.value = 'false';
+                }
+        });
+    }
+
+    function closeDeleteModal() {
+        document.getElementById('deleteModal').style.display = 'none';
+    }
+
+    // Обновляем обработчик клика вне модального окна
+    window.onclick = function(event) {
+        const editModal = document.getElementById('editModal');
+        if (event.target == editModal) {
+            closeEditModal();
+        }
+        const createModal = document.getElementById('createModal');
+        if (event.target == createModal) {
+            closeCreateModal();
+        }
+        const deleteModal = document.getElementById('deleteModal');
+        if (event.target == deleteModal) {
+            closeDeleteModal();
+        }
+    }
+</script>
 {% endblock %}

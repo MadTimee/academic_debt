@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from sqlalchemy import event
 from config import Config
+import json
 
 db = SQLAlchemy()
 login_manager = LoginManager()
@@ -16,6 +17,16 @@ def create_app():
 
     db.init_app(app)
     login_manager.init_app(app)
+
+    # Регистрируем фильтр для шаблонов
+    @app.template_filter('from_json')
+    def from_json_filter(value):
+        if not value:
+            return None
+        try:
+            return json.loads(value)
+        except:
+            return value
 
     with app.app_context():
         @event.listens_for(db.engine, "connect")

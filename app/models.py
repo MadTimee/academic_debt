@@ -31,10 +31,79 @@ class Position(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100), nullable=False)
     rank = db.Column(db.Integer, nullable=False)
+    permissions_mask = db.Column(db.Integer, nullable=False, default=0)
     permissions_desc = db.Column(db.Text, nullable=True)
 
-    # Явная двусторонняя связь
     admins = db.relationship('Admin', back_populates='position', lazy=True)
+
+    # Вспомогательные методы для работы с правами
+    def has_permission(self, table_name):
+        """Проверяет, есть ли у должности право на редактирование таблицы"""
+        bit = self._get_table_bit(table_name)
+        if bit is None:
+            return False
+        return bool(self.permissions_mask & bit)
+
+    def set_permission(self, table_name, value):
+        """Устанавливает право на редактирование таблицы"""
+        bit = self._get_table_bit(table_name)
+        if bit is None:
+            return False
+
+        if value:
+            self.permissions_mask |= bit
+        else:
+            self.permissions_mask &= ~bit
+        return True
+
+    @staticmethod
+    def _get_table_bit(table_name):
+        """Возвращает бит для таблицы"""
+        table_bits = {
+            'student': 1,
+            'teacher': 2,
+            'admin_user': 4,
+            'study_group': 8,
+            'discipline': 16,
+            'study_plan': 32,
+            'study_direction': 64,
+            'position': 128,  # Только для высшего ранга!
+            'contact': 256,
+            'assessment_event': 512,
+            'teacher_assignment': 1024,
+            'plan_discipline_link': 2048
+        }
+        return table_bits.get(table_name)
+
+    @staticmethod
+    def get_all_table_bits():
+        """Возвращает все биты для отображения в интерфейсе"""
+        return {
+            'student': {'bit': 1, 'name_ru': 'Студенты'},
+            'teacher': {'bit': 2, 'name_ru': 'Преподаватели'},
+            'admin_user': {'bit': 4, 'name_ru': 'Администраторы'},
+            'study_group': {'bit': 8, 'name_ru': 'Учебные группы'},
+            'discipline': {'bit': 16, 'name_ru': 'Дисциплины'},
+            'study_plan': {'bit': 32, 'name_ru': 'Учебные планы'},
+            'study_direction': {'bit': 64, 'name_ru': 'Направления'},
+            'position': {'bit': 128, 'name_ru': 'Должности'},
+            'contact': {'bit': 256, 'name_ru': 'Контакты'},
+            'assessment_event': {'bit': 512, 'name_ru': 'Зачётные мероприятия'},
+            'teacher_assignment': {'bit': 1024, 'name_ru': 'Нагрузка преподавателей'},
+            'plan_discipline_link': {'bit': 2048, 'name_ru': 'Связь план-дисциплина'}
+        }
+
+    def get_permissions_list(self):
+        """Возвращает список прав для отображения"""
+        all_bits = self.get_all_table_bits()
+        result = {}
+        for table_name, info in all_bits.items():
+            result[table_name] = {
+                'name_ru': info['name_ru'],
+                'has_permission': bool(self.permissions_mask & info['bit']),
+                'bit': info['bit']
+            }
+        return result
 
 
 # 3. Направление подготовки
@@ -59,8 +128,11 @@ class StudyPlan(db.Model):
 
     direction = db.relationship('StudyDirection', back_populates='plans')
     groups = db.relationship('StudyGroup', back_populates='plan', lazy=True)
-    disciplines_link = db.relationship('PlanDisciplineLink', back_populates='plan', lazy=True,
-                                       cascade='all, delete-orphan')
+    disciplines_link = db.relationship(
+        'PlanDisciplineLink',
+        back_populates='plan',
+        lazy=True
+    )
 
 
 # 5. Учебная группа
@@ -74,8 +146,18 @@ class StudyGroup(db.Model):
     current_semester = db.Column(db.Integer, nullable=False, default=1)
 
     plan = db.relationship('StudyPlan', back_populates='groups')
-    students = db.relationship('Student', back_populates='group', lazy=True)
-    teacher_assignments = db.relationship('TeacherAssignment', back_populates='study_group', lazy=True)
+    students = db.relationship(
+        'Student',
+        back_populates='group',
+        lazy=True,
+        cascade='all, delete-orphan'
+    )
+    teacher_assignments = db.relationship(
+        'TeacherAssignment',
+        back_populates='study_group',
+        lazy=True,
+        cascade='all, delete-orphan'
+    )
 
 
 # 6. Дисциплина
@@ -86,7 +168,11 @@ class Discipline(db.Model):
 
     plans_link = db.relationship('PlanDisciplineLink', back_populates='discipline', lazy=True)
     teacher_assignments = db.relationship('TeacherAssignment', back_populates='discipline', lazy=True)
-    assessments = db.relationship('AssessmentEvent', back_populates='discipline', lazy=True)
+    assessments = db.relationship(
+        'AssessmentEvent',
+        back_populates='discipline',
+        lazy=True
+    )
 
 
 # 7. Связь План-Дисциплина
@@ -113,13 +199,18 @@ class Student(db.Model, UserMixin):
     student_id_number = db.Column(db.String(50), unique=True, nullable=False)
     group_id = db.Column(db.Integer, db.ForeignKey('study_group.id'), nullable=False)
     status = db.Column(db.String(50), default='учится')
-    contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), unique=True)
+    contact_id = db.Column(db.Integer, db.ForeignKey('contact.id', ondelete='CASCADE'), unique=True)
     reg_date = db.Column(db.Date, default=datetime.utcnow)
     login = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
 
     group = db.relationship('StudyGroup', back_populates='students')
-    assessments = db.relationship('AssessmentEvent', back_populates='student', lazy=True)
+    assessments = db.relationship(
+        'AssessmentEvent',
+        back_populates='student',
+        lazy=True,
+        cascade='all, delete-orphan'
+    )
 
     def get_id(self):
         return f"student_{self.id}"
@@ -133,13 +224,22 @@ class Teacher(db.Model, UserMixin):
     name = db.Column(db.String(100), nullable=False)
     patronymic = db.Column(db.String(100))
     work_email = db.Column(db.String(100), unique=True)
-    contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), unique=True)
+    contact_id = db.Column(db.Integer, db.ForeignKey('contact.id', ondelete='CASCADE'), unique=True)
     reg_date = db.Column(db.Date, default=datetime.utcnow)
     login = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
 
-    assignments = db.relationship('TeacherAssignment', back_populates='teacher', lazy=True)
-    assessments = db.relationship('AssessmentEvent', back_populates='teacher', lazy=True)
+    assignments = db.relationship(
+        'TeacherAssignment',
+        back_populates='teacher',
+        lazy=True,
+        cascade='all, delete-orphan'
+    )
+    assessments = db.relationship(
+        'AssessmentEvent',
+        back_populates='teacher',
+        lazy=True
+    )
 
     def get_id(self):
         return f"teacher_{self.id}"
@@ -154,7 +254,7 @@ class Admin(db.Model, UserMixin):
     patronymic = db.Column(db.String(100))
     position_id = db.Column(db.Integer, db.ForeignKey('position.id'), nullable=False)
     work_email = db.Column(db.String(100), unique=True)
-    contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), unique=True)
+    contact_id = db.Column(db.Integer, db.ForeignKey('contact.id', ondelete='CASCADE'), unique=True)
     reg_date = db.Column(db.Date, default=datetime.utcnow)
     login = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
@@ -177,7 +277,7 @@ class AssessmentEvent(db.Model):
     date = db.Column(db.Date, nullable=False)
     grade = db.Column(db.String(50))
     semester = db.Column(db.Integer, nullable=False)
-    teacher_id = db.Column(db.Integer, db.ForeignKey('teacher.id'), nullable=False)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('teacher.id', ondelete='SET NULL'), nullable=True)
 
     discipline = db.relationship('Discipline', back_populates='assessments')
     student = db.relationship('Student', back_populates='assessments')
@@ -188,7 +288,7 @@ class AssessmentEvent(db.Model):
 class ActionLog(db.Model):
     __tablename__ = 'action_log'
     id = db.Column(db.Integer, primary_key=True)
-    admin_id = db.Column(db.Integer, db.ForeignKey('admin.id'), nullable=False)
+    admin_id = db.Column(db.Integer, db.ForeignKey('admin.id', ondelete='SET NULL'), nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     operation_type = db.Column(db.String(10), nullable=False)
     table_name = db.Column(db.String(100), nullable=False)
